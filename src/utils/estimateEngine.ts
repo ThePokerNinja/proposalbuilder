@@ -16,15 +16,14 @@ export function calculateEstimate(answers: Answer[]): Task[] {
     { id: 'launch', name: 'Launch & Handoff', baseHours: 8, multiplier: 1, category: 'Deployment' },
   ];
 
-  // Apply multipliers based on answers
+  // Apply multipliers based on answers (supports both old and new question IDs)
   answers.forEach((answer) => {
     const question = QUESTIONS.find((q) => q.id === answer.questionId);
-    if (!question) return;
-
     const value = Array.isArray(answer.value) ? answer.value : [answer.value];
-    const impact = question.weight;
+    const stringValue = typeof answer.value === 'string' ? answer.value : Array.isArray(answer.value) ? answer.value.join(' ') : String(answer.value);
 
     switch (answer.questionId) {
+      // Old question IDs (for backward compatibility)
       case 'project-type':
         if (value.includes('Combined Project')) {
           tasks.find((t) => t.id === 'branding')!.multiplier *= 1.5;
@@ -50,19 +49,24 @@ export function calculateEstimate(answers: Answer[]): Task[] {
         break;
 
       case 'content-status':
-        if (value.includes('Need content creation') || value.includes('Starting from scratch')) {
+      case 'content-strategy':
+        if (stringValue.includes('Need content creation') || stringValue.includes('Starting from scratch') || stringValue.includes('starting from scratch')) {
           tasks.find((t) => t.id === 'content')!.multiplier *= 2.0;
-        } else if (value.includes('Some content ready')) {
+        } else if (stringValue.includes('Some content ready') || stringValue.includes('some content')) {
           tasks.find((t) => t.id === 'content')!.multiplier *= 1.3;
         }
         break;
 
       case 'integration-complexity':
+      case 'technical-requirements':
         if (Array.isArray(answer.value)) {
           const complexity = answer.value.length;
-          tasks.find((t) => t.id === 'development')!.multiplier *= 1 + complexity * 0.2;
-          if (answer.value.includes('Custom backend development')) {
+          tasks.find((t) => t.id === 'development')!.multiplier *= 1 + complexity * 0.15;
+          if (stringValue.includes('Custom backend') || stringValue.includes('backend development')) {
             tasks.find((t) => t.id === 'development')!.multiplier *= 1.5;
+          }
+          if (stringValue.includes('E-commerce') || stringValue.includes('ecommerce')) {
+            tasks.find((t) => t.id === 'development')!.multiplier *= 1.3;
           }
         }
         break;
@@ -76,11 +80,67 @@ export function calculateEstimate(answers: Answer[]): Task[] {
         break;
 
       case 'timeline-preference':
-        if (value.includes('Rush')) {
+      case 'timeline-urgency':
+        if (stringValue.includes('Time-sensitive') || stringValue.includes('Rush') || stringValue.includes('2-4 weeks')) {
           // Rush projects may need more hours due to parallel work
           tasks.forEach((t) => {
             if (t.category === 'Development' || t.category === 'Design') {
               t.multiplier *= 1.2;
+            }
+          });
+        }
+        break;
+
+      // New personalized question IDs
+      case 'project-scope':
+        // Map scope answers to multipliers
+        if (stringValue.includes('Complete') || stringValue.includes('Full')) {
+          tasks.find((t) => t.id === 'branding')!.multiplier *= 1.3;
+          tasks.find((t) => t.id === 'ui-design')!.multiplier *= 1.3;
+        }
+        if (stringValue.includes('e-commerce') || stringValue.includes('E-commerce')) {
+          tasks.find((t) => t.id === 'development')!.multiplier *= 1.5;
+        }
+        break;
+
+      case 'current-state':
+        if (stringValue.includes('Starting from scratch') || stringValue.includes('no existing')) {
+          tasks.find((t) => t.id === 'discovery')!.multiplier *= 1.5;
+          tasks.find((t) => t.id === 'research')!.multiplier *= 1.3;
+        } else if (stringValue.includes('complete overhaul')) {
+          tasks.find((t) => t.id === 'ui-design')!.multiplier *= 1.4;
+          tasks.find((t) => t.id === 'development')!.multiplier *= 1.4;
+        }
+        break;
+
+      case 'business-value':
+        // More value goals = more comprehensive solution
+        if (Array.isArray(answer.value)) {
+          const valueCount = answer.value.length;
+          if (valueCount > 4) {
+            tasks.forEach((t) => {
+              if (t.category === 'Design' || t.category === 'Development') {
+                t.multiplier *= 1.1;
+              }
+            });
+          }
+        }
+        break;
+
+      case 'investment-clarity':
+        // Higher budget = more comprehensive solution
+        if (stringValue.includes('$75,000+') || stringValue.includes('Enterprise')) {
+          tasks.forEach((t) => {
+            t.multiplier *= 1.3;
+          });
+        } else if (stringValue.includes('$35,000 - $75,000')) {
+          tasks.forEach((t) => {
+            t.multiplier *= 1.1;
+          });
+        } else if (stringValue.includes('Under $15,000')) {
+          tasks.forEach((t) => {
+            if (t.category === 'Development' || t.category === 'Design') {
+              t.multiplier *= 0.8;
             }
           });
         }

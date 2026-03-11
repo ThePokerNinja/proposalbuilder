@@ -201,12 +201,14 @@ function Scene({ tasks, onTaskHoursChange }: Sphere3DVisualizationProps) {
               category={milestone.category}
               color={color}
               onHoursChange={(newHours) => {
-                // Distribute hours change proportionally across tasks
-                const ratio = newHours / milestone.totalHours;
-                milestone.tasks.forEach((task) => {
-                  const newTaskHours = (task.baseHours * task.multiplier) * ratio;
-                  onTaskHoursChange(task.id, newTaskHours);
-                });
+                // Distribute hours change proportionally across tasks in this milestone
+                if (milestone.totalHours > 0) {
+                  const ratio = newHours / milestone.totalHours;
+                  milestone.tasks.forEach((task) => {
+                    const newTaskHours = (task.baseHours * task.multiplier) * ratio;
+                    onTaskHoursChange(task.id, newTaskHours);
+                  });
+                }
               }}
             />
             {/* Connect to other spheres */}
@@ -236,15 +238,27 @@ function Scene({ tasks, onTaskHoursChange }: Sphere3DVisualizationProps) {
 }
 
 export function Sphere3DVisualization({ tasks, onTaskHoursChange }: Sphere3DVisualizationProps) {
+  // Filter to only selected tasks
+  const selectedTasks = tasks.filter(t => t.selected !== false);
+  
+  if (selectedTasks.length === 0) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-6 shadow-lg border-2 border-gray-700 h-[600px] relative flex items-center justify-center">
+        <p className="text-white/70 text-lg">Select tasks to see 3D visualization</p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-900 rounded-xl p-6 shadow-lg border-2 border-gray-700 h-[600px] relative">
       <div className="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20">
         <h3 className="text-white font-bold text-lg mb-1">3D Milestone Visualization</h3>
-        <p className="text-white/70 text-xs">Click spheres to adjust hours • Drag to rotate</p>
+        <p className="text-white/70 text-xs">Click spheres to adjust hours • Drag to rotate • Scroll to zoom</p>
       </div>
       <Canvas
         camera={{ position: [0, 0, 15], fov: 50 }}
         style={{ background: 'linear-gradient(to bottom, #1a1a2e, #16213e)' }}
+        gl={{ antialias: true }}
       >
         <OrbitControls
           enablePan={true}
@@ -253,7 +267,7 @@ export function Sphere3DVisualization({ tasks, onTaskHoursChange }: Sphere3DVisu
           minDistance={5}
           maxDistance={30}
         />
-        <Scene tasks={tasks} onTaskHoursChange={onTaskHoursChange} />
+        <Scene tasks={selectedTasks} onTaskHoursChange={onTaskHoursChange} />
       </Canvas>
     </div>
   );

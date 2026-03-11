@@ -2,10 +2,12 @@ import React from 'react';
 import { Question, Answer } from '../types';
 import { Mic, MicOff, Sparkles } from 'lucide-react';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
+import { calculateQuestionImpact, QuestionImpact } from '../utils/questionImpact';
 
 interface QuestionCardProps {
   question: Question;
   answer: Answer | null;
+  allAnswers: Answer[];
   onAnswer: (answer: Answer) => void;
   questionNumber: number;
   totalQuestions: number;
@@ -13,9 +15,10 @@ interface QuestionCardProps {
   hasPrediction?: boolean;
 }
 
-export function QuestionCard({ question, answer, onAnswer, questionNumber, totalQuestions, prediction, hasPrediction }: QuestionCardProps) {
+export function QuestionCard({ question, answer, allAnswers, onAnswer, questionNumber, totalQuestions, prediction, hasPrediction }: QuestionCardProps) {
   const [textInput, setTextInput] = React.useState('');
   const [voiceTranscript, setVoiceTranscript] = React.useState('');
+  const [hoverImpact, setHoverImpact] = React.useState<{ option: string; impact: QuestionImpact } | null>(null);
 
   const handleVoiceResult = (transcript: string) => {
     setVoiceTranscript(transcript);
@@ -122,19 +125,42 @@ export function QuestionCard({ question, answer, onAnswer, questionNumber, total
 
       {question.type === 'select' && (
         <div className="space-y-3">
-          {question.options?.map((option) => (
-            <button
-              key={option}
-              onClick={() => handleSelectChange(option)}
-              className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium ${
-                answer?.value === option
-                  ? 'border-portfolio-blue bg-blue-50 text-portfolio-blue shadow-md'
-                  : 'border-gray-200 hover:border-portfolio-blue hover:bg-gray-50 text-gray-900'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
+          {question.options?.map((option) => {
+            const isSelected = answer?.value === option;
+
+            return (
+              <button
+                key={option}
+                onClick={() => handleSelectChange(option)}
+                onMouseEnter={() => {
+                  const previewAnswer: Answer = { questionId: question.id, value: option };
+                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers);
+                  setHoverImpact({ option, impact });
+                }}
+                onMouseLeave={() => setHoverImpact(null)}
+                className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium flex items-center justify-between gap-3 ${
+                  isSelected
+                    ? 'border-portfolio-blue bg-blue-50 text-portfolio-blue shadow-md'
+                    : 'border-gray-200 hover:border-portfolio-blue hover:bg-gray-50 text-gray-900'
+                }`}
+              >
+                <span>{option}</span>
+                {hoverImpact && hoverImpact.option === option && hoverImpact.impact.hasImpact && (
+                  <span
+                    className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${
+                      hoverImpact.impact.impactHours > 0
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {hoverImpact.impact.impactHours > 0
+                      ? `Adds ${Math.round(hoverImpact.impact.impactHours)}h`
+                      : `Saves ${Math.abs(Math.round(hoverImpact.impact.impactHours))}h`}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -146,13 +172,23 @@ export function QuestionCard({ question, answer, onAnswer, questionNumber, total
               <button
                 key={option}
                 onClick={() => handleSelectChange(option)}
-                className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium ${
+                onMouseEnter={() => {
+                  const currentValues = Array.isArray(answer?.value) ? (answer.value as string[]) : [];
+                  const newValues = isSelected
+                    ? currentValues.filter((v) => v !== option)
+                    : [...currentValues, option];
+                  const previewAnswer: Answer = { questionId: question.id, value: newValues };
+                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers);
+                  setHoverImpact({ option, impact });
+                }}
+                onMouseLeave={() => setHoverImpact(null)}
+                className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium flex items-center justify-between gap-3 ${
                   isSelected
                     ? 'border-portfolio-blue bg-blue-50 text-portfolio-blue shadow-md'
                     : 'border-gray-200 hover:border-portfolio-blue hover:bg-gray-50 text-gray-900'
                 }`}
               >
-                <span className="flex items-center">
+                <span className="flex items-center flex-1 min-w-0">
                   <span
                     className={`w-5 h-5 rounded border-2 mr-3 flex items-center justify-center transition-all ${
                       isSelected
@@ -172,6 +208,19 @@ export function QuestionCard({ question, answer, onAnswer, questionNumber, total
                   </span>
                   {option}
                 </span>
+                {hoverImpact && hoverImpact.option === option && hoverImpact.impact.hasImpact && (
+                  <span
+                    className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${
+                      hoverImpact.impact.impactHours > 0
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {hoverImpact.impact.impactHours > 0
+                      ? `Adds ${Math.round(hoverImpact.impact.impactHours)}h`
+                      : `Saves ${Math.abs(Math.round(hoverImpact.impact.impactHours))}h`}
+                  </span>
+                )}
               </button>
             );
           })}
