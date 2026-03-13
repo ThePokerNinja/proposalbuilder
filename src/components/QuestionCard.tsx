@@ -1,7 +1,6 @@
 import React from 'react';
 import { Question, Answer } from '../types';
-import { Mic, MicOff, Sparkles } from 'lucide-react';
-import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
+import { ArrowLeft, ArrowRight, CheckCircle } from 'lucide-react';
 import { calculateQuestionImpact, QuestionImpact } from '../utils/questionImpact';
 
 interface QuestionCardProps {
@@ -11,26 +10,45 @@ interface QuestionCardProps {
   onAnswer: (answer: Answer) => void;
   questionNumber: number;
   totalQuestions: number;
-  prediction?: string | string[];
-  hasPrediction?: boolean;
+  projectName?: string;
+  projectSummary?: string;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  canGoBack?: boolean;
+  isLastQuestion?: boolean;
+  canContinue?: boolean;
 }
 
-export function QuestionCard({ question, answer, allAnswers, onAnswer, questionNumber, totalQuestions, prediction, hasPrediction }: QuestionCardProps) {
-  const [textInput, setTextInput] = React.useState('');
-  const [voiceTranscript, setVoiceTranscript] = React.useState('');
+export function QuestionCard({
+  question,
+  answer,
+  allAnswers,
+  onAnswer,
+  questionNumber,
+  totalQuestions,
+  projectName,
+  projectSummary,
+  onPrevious,
+  onNext,
+  canGoBack = false,
+  isLastQuestion = false,
+  canContinue = false,
+}: QuestionCardProps) {
+  // Initialize textInput from existing answer if available
+  const [textInput, setTextInput] = React.useState<string>(() => {
+    if (question.type === 'text' && answer && typeof answer.value === 'string') {
+      return answer.value;
+    }
+    return '';
+  });
   const [hoverImpact, setHoverImpact] = React.useState<{ option: string; impact: QuestionImpact } | null>(null);
 
-  const handleVoiceResult = (transcript: string) => {
-    setVoiceTranscript(transcript);
-    setTextInput(transcript);
-    if (question.type === 'text') {
-      onAnswer({ questionId: question.id, value: transcript });
+  // Update textInput when answer changes
+  React.useEffect(() => {
+    if (question.type === 'text' && answer && typeof answer.value === 'string') {
+      setTextInput(answer.value);
     }
-  };
-
-  const { isListening, isSupported, startListening, stopListening } = useVoiceRecognition({
-    onResult: handleVoiceResult,
-  });
+  }, [answer, question.type]);
 
   const handleSelectChange = (value: string) => {
     if (question.type === 'multi-select') {
@@ -44,87 +62,58 @@ export function QuestionCard({ question, answer, allAnswers, onAnswer, questionN
     }
   };
 
-  const handleTextSubmit = () => {
-    if (textInput.trim()) {
-      onAnswer({ questionId: question.id, value: textInput });
-    }
+  const handleTextChange = (value: string) => {
+    setTextInput(value);
+    // Update answer in real-time as user types (preserve spaces)
+    onAnswer({ questionId: question.id, value });
   };
 
   return (
-    <div className="portfolio-card p-8 md:p-10 max-w-2xl mx-auto">
-      <div className="mb-6 flex items-center flex-wrap gap-3">
-        <span className="text-sm font-semibold text-portfolio-blue">
-          Question {questionNumber} of {totalQuestions}
-        </span>
-        <span className="text-gray-300">•</span>
-        <span className="text-sm text-gray-600 capitalize font-medium">{question.category}</span>
-        <span className="text-gray-300">•</span>
-        <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
-          question.type === 'multi-select'
-            ? 'bg-purple-100 text-purple-700'
-            : question.type === 'select'
-            ? 'bg-blue-100 text-blue-700'
-            : 'bg-gray-100 text-gray-700'
-        }`}>
-          {question.type === 'multi-select' ? 'Multiple Selection' : question.type === 'select' ? 'Single Selection' : 'Text Input'}
-        </span>
-      </div>
-
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2 leading-tight">{question.text}</h2>
-        {hasPrediction && !answer && prediction && (
-          <div className="flex items-center gap-2 text-sm text-portfolio-blue bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
-            <Sparkles className="w-4 h-4" />
-            <span className="font-medium">AI Suggestion: Based on your project description</span>
+    <div className="relative group">
+      {/* Gradient border effect */}
+      <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+      <div className="relative bg-white rounded-2xl p-10 md:p-12 max-w-2xl mx-auto shadow-2xl border border-gray-100">
+        {/* Enhanced header */}
+        <div className="mb-8 flex items-center flex-wrap gap-3 pb-6 border-b-2 border-gray-100">
+          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+            <span className="text-sm font-bold text-portfolio-blue">
+              Question {questionNumber}
+            </span>
+            <span className="text-gray-400">/</span>
+            <span className="text-sm text-gray-600 font-medium">{totalQuestions}</span>
           </div>
-        )}
+          <span className="text-gray-300">•</span>
+          <span className="text-sm text-gray-700 capitalize font-semibold bg-gray-100 px-3 py-1.5 rounded-lg">{question.category}</span>
+          <span className="text-gray-300">•</span>
+          <span className={`text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm ${
+            question.type === 'multi-select'
+              ? 'bg-gradient-to-r from-purple-100 to-purple-200 text-purple-700 border border-purple-300'
+              : question.type === 'select'
+              ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-700 border border-blue-300'
+              : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 border border-gray-300'
+          }`}>
+            {question.type === 'multi-select' ? 'Multiple Selection' : question.type === 'select' ? 'Single Selection' : 'Text Input'}
+          </span>
+        </div>
+
+        <div className="mb-8">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-4 leading-tight bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent">{question.text}</h2>
       </div>
 
       {question.type === 'text' && (
         <div className="space-y-4">
-          <div className="relative">
-            <textarea
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleTextSubmit();
-                }
-              }}
-              placeholder="Type your answer or use voice input..."
-              className="w-full px-5 py-4 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-portfolio-blue focus:border-portfolio-blue resize-none text-gray-900"
-              rows={4}
-            />
-            {isSupported && (
-              <button
-                onClick={isListening ? stopListening : startListening}
-                className={`absolute bottom-4 right-4 p-2.5 rounded-full transition-all shadow-lg ${
-                  isListening
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-portfolio-blue text-white hover:bg-portfolio-blue-dark'
-                }`}
-                title={isListening ? 'Stop listening' : 'Start voice input'}
-              >
-                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-              </button>
-            )}
-          </div>
-          {voiceTranscript && (
-            <p className="text-sm text-gray-600 italic">Voice input: "{voiceTranscript}"</p>
-          )}
-          <button
-            onClick={handleTextSubmit}
-            disabled={!textInput.trim()}
-            className="w-full bg-portfolio-blue text-white py-4 rounded-lg font-semibold text-lg hover:bg-portfolio-blue-dark disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-          >
-            Continue
-          </button>
+          <textarea
+            value={textInput}
+            onChange={(e) => handleTextChange(e.target.value)}
+            placeholder="Type your answer..."
+            className="w-full px-6 py-5 text-lg border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white resize-none text-gray-900 placeholder:text-gray-400 leading-relaxed shadow-sm"
+            rows={5}
+          />
         </div>
       )}
 
       {question.type === 'select' && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {question.options?.map((option) => {
             const isSelected = answer?.value === option;
 
@@ -134,14 +123,14 @@ export function QuestionCard({ question, answer, allAnswers, onAnswer, questionN
                 onClick={() => handleSelectChange(option)}
                 onMouseEnter={() => {
                   const previewAnswer: Answer = { questionId: question.id, value: option };
-                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers);
+                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers, question.text, projectName, projectSummary);
                   setHoverImpact({ option, impact });
                 }}
                 onMouseLeave={() => setHoverImpact(null)}
-                className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium flex items-center justify-between gap-3 ${
+                className={`w-full text-left px-6 py-5 rounded-xl border-2 transition-all duration-200 font-semibold text-base flex items-center justify-between gap-4 group ${
                   isSelected
-                    ? 'border-portfolio-blue bg-blue-50 text-portfolio-blue shadow-md'
-                    : 'border-gray-200 hover:border-portfolio-blue hover:bg-gray-50 text-gray-900'
+                    ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 text-portfolio-blue shadow-lg scale-[1.02]'
+                    : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50 text-gray-900 hover:shadow-md hover:scale-[1.01]'
                 }`}
               >
                 <span>{option}</span>
@@ -165,7 +154,7 @@ export function QuestionCard({ question, answer, allAnswers, onAnswer, questionN
       )}
 
       {question.type === 'multi-select' && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {question.options?.map((option) => {
             const isSelected = Array.isArray(answer?.value) && (answer.value as string[]).includes(option);
             return (
@@ -178,14 +167,14 @@ export function QuestionCard({ question, answer, allAnswers, onAnswer, questionN
                     ? currentValues.filter((v) => v !== option)
                     : [...currentValues, option];
                   const previewAnswer: Answer = { questionId: question.id, value: newValues };
-                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers);
+                  const impact = calculateQuestionImpact(question.id, previewAnswer, allAnswers, question.text, projectName, projectSummary);
                   setHoverImpact({ option, impact });
                 }}
                 onMouseLeave={() => setHoverImpact(null)}
-                className={`w-full text-left px-5 py-4 rounded-lg border-2 transition-all font-medium flex items-center justify-between gap-3 ${
+                className={`w-full text-left px-6 py-5 rounded-xl border-2 transition-all duration-200 font-semibold text-base flex items-center justify-between gap-4 group ${
                   isSelected
-                    ? 'border-portfolio-blue bg-blue-50 text-portfolio-blue shadow-md'
-                    : 'border-gray-200 hover:border-portfolio-blue hover:bg-gray-50 text-gray-900'
+                    ? 'border-purple-500 bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 shadow-lg scale-[1.02]'
+                    : 'border-gray-200 hover:border-purple-400 hover:bg-gray-50 text-gray-900 hover:shadow-md hover:scale-[1.01]'
                 }`}
               >
                 <span className="flex items-center flex-1 min-w-0">
@@ -234,6 +223,41 @@ export function QuestionCard({ question, answer, allAnswers, onAnswer, questionN
           )}
         </div>
       )}
+
+      {/* Inline navigation footer inside the card */}
+      {onNext && (
+        <div className="mt-8 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onPrevious}
+            disabled={!canGoBack || !onPrevious}
+            className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back
+          </button>
+
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!canContinue}
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-portfolio-blue font-semibold text-sm shadow-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLastQuestion ? (
+              <>
+                Generate estimate
+                <CheckCircle className="w-4 h-4 ml-2" />
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

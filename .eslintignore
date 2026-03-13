@@ -1,0 +1,9 @@
+node_modules
+dist
+agent-starter-react
+agent
+*.config.js
+*.config.ts
+server.js
+check-setup.js
+test-*.js

@@ -1,16 +1,39 @@
-import { Question } from '../types';
+import { Question, Answer } from '../types';
 import { analyzeProjectInput } from './learningEngine';
 
 /**
  * Generate intelligent, personalized questions based on project name and summary
  * Focuses on problem statement, target audience, and business value
+ * Questions are filtered based on project type - only relevant questions are shown
  */
 export function generatePersonalizedQuestions(
   projectName: string,
-  projectSummary: string
+  projectSummary: string,
+  existingAnswers?: Answer[]
 ): Question[] {
   const analysis = analyzeProjectInput(projectName, projectSummary);
   const combinedText = `${projectName} ${projectSummary}`.toLowerCase();
+  const answerMap = existingAnswers ? new Map(existingAnswers.map(a => [a.questionId, a.value])) : new Map();
+  
+  // Detect project type more accurately
+  const isLogo = combinedText.includes('logo') || combinedText.includes('logotype') || 
+                 combinedText.includes('brand mark') || combinedText.includes('wordmark') ||
+                 answerMap.get('project-scope')?.toString().toLowerCase().includes('logo');
+  const isBranding = (combinedText.includes('brand') || combinedText.includes('branding') || 
+                     combinedText.includes('identity') || combinedText.includes('visual identity') ||
+                     answerMap.get('project-scope')?.toString().toLowerCase().includes('brand')) && !isLogo;
+  const isWebsite = combinedText.includes('website') || combinedText.includes('web') || 
+                    combinedText.includes('site') || combinedText.includes('webpage') ||
+                    answerMap.get('project-scope')?.toString().toLowerCase().includes('website');
+  const isVideo = combinedText.includes('video') || combinedText.includes('film') || 
+                  combinedText.includes('editing') || combinedText.includes('production');
+  // const isPrint = combinedText.includes('print') || combinedText.includes('business card') ||
+  //                 combinedText.includes('card');
+  const needsDevelopment = isWebsite || analysis.projectType === 'ecommerce' || 
+                          analysis.projectType === 'app' || analysis.projectType === 'design-system';
+  const needsContent = isWebsite || isVideo || analysis.projectType === 'ecommerce';
+  const needsUserJourney = isWebsite || analysis.projectType === 'app' || 
+                          analysis.projectType === 'ecommerce';
   
   // Base questions that adapt based on project context
   const questions: Question[] = [];
@@ -70,7 +93,9 @@ export function generatePersonalizedQuestions(
   const scopeOptions = generateScopeOptions(analysis);
   const scopeQuestion: Question = {
     id: 'project-scope',
-    text: `Based on "${projectName}", what's the primary focus of this engagement?`,
+    text: isLogo || isBranding 
+      ? `What's the primary focus of this ${isLogo ? 'logo' : 'branding'} project?`
+      : `Based on "${projectName}", what's the primary focus of this engagement?`,
     type: 'select',
     options: scopeOptions,
     category: 'scope',
@@ -78,43 +103,69 @@ export function generatePersonalizedQuestions(
   };
   questions.push(scopeQuestion);
 
-  // Question 6: User Journey & Experience Goals
-  const journeyQuestion: Question = {
-    id: 'user-journey',
-    text: `What's the ideal experience you want your audience to have with "${projectName}"?`,
-    type: 'multi-select',
-    options: [
-      'Seamless, intuitive navigation',
-      'Compelling brand storytelling',
-      'Clear conversion path to action',
-      'Educational and informative',
-      'Engaging and interactive',
-      'Professional and trustworthy',
-      'Modern and innovative',
-    ],
-    category: 'goals',
-    weight: 1.0,
-  };
-  questions.push(journeyQuestion);
+  // Question 6: User Journey & Experience Goals (Only for digital/interactive projects)
+  if (needsUserJourney) {
+    const journeyQuestion: Question = {
+      id: 'user-journey',
+      text: `What's the ideal experience you want your audience to have with "${projectName}"?`,
+      type: 'multi-select',
+      options: isLogo || isBranding ? [
+        'Compelling brand storytelling',
+        'Professional and trustworthy',
+        'Modern and innovative',
+        'Memorable and distinctive',
+        'Versatile across applications',
+      ] : [
+        'Seamless, intuitive navigation',
+        'Compelling brand storytelling',
+        'Clear conversion path to action',
+        'Educational and informative',
+        'Engaging and interactive',
+        'Professional and trustworthy',
+        'Modern and innovative',
+      ],
+      category: 'goals',
+      weight: 1.0,
+    };
+    questions.push(journeyQuestion);
+  }
 
-  // Question 7: Content & Messaging Strategy
-  const contentQuestion: Question = {
-    id: 'content-strategy',
-    text: `What's your content situation for "${projectName}"? Great design amplifies great content.`,
-    type: 'select',
-    options: [
-      'We have all content ready - copy, images, assets',
-      'We have some content but need strategic refinement',
-      'We need content creation and strategy',
-      'We're starting from scratch - need full content strategy',
-    ],
-    category: 'scope',
-    weight: 0.9,
-  };
-  questions.push(contentQuestion);
+  // Question 7: Content & Messaging Strategy (Only if content is relevant)
+  if (needsContent) {
+    const contentQuestion: Question = {
+      id: 'content-strategy',
+      text: `What's your content situation for "${projectName}"? Great design amplifies great content.`,
+      type: 'select',
+      options: [
+        'We have all content ready - copy, images, assets',
+        'We have some content but need strategic refinement',
+        'We need content creation and strategy',
+        "We're starting from scratch - need full content strategy",
+      ],
+      category: 'scope',
+      weight: 0.9,
+    };
+    questions.push(contentQuestion);
+  } else if (isLogo || isBranding) {
+    // For logo/branding, ask about brand assets instead
+    const brandAssetsQuestion: Question = {
+      id: 'brand-assets',
+      text: `What brand assets do you currently have?`,
+      type: 'select',
+      options: [
+        'We have existing logo but need refinement',
+        'We have brand colors/typography but need logo',
+        'We have some brand elements but need complete system',
+        'Starting from scratch - need everything',
+      ],
+      category: 'scope',
+      weight: 0.9,
+    };
+    questions.push(brandAssetsQuestion);
+  }
 
-  // Question 8: Technical Requirements (If complexity detected)
-  if (analysis.complexity === 'high' || analysis.features.length > 0) {
+  // Question 8: Technical Requirements (ONLY for projects that need development)
+  if (needsDevelopment && (analysis.complexity === 'high' || analysis.features.length > 0 || isWebsite)) {
     const techQuestion: Question = {
       id: 'technical-requirements',
       text: `What technical capabilities does "${projectName}" need to deliver on your business goals?`,
@@ -167,7 +218,7 @@ export function generatePersonalizedQuestions(
  */
 function generateAudienceOptions(
   analysis: ReturnType<typeof analyzeProjectInput>,
-  combinedText: string
+  _combinedText: string
 ): string[] {
   const baseOptions = [
     'B2B Decision Makers & Executives',
@@ -219,7 +270,7 @@ function generateAudienceOptions(
  */
 function generateValueOptions(
   analysis: ReturnType<typeof analyzeProjectInput>,
-  combinedText: string
+  _combinedText: string
 ): string[] {
   const options = [
     'Increase qualified leads and conversions',

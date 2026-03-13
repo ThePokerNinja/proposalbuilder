@@ -1,17 +1,18 @@
-import React from 'react';
 import { QuestionImpact } from '../utils/questionImpact';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface QuestionImpactVisualizationProps {
   impacts: QuestionImpact[];
   currentQuestionId?: string;
+  projectName?: string;
+  projectContext?: string;
 }
 
 export function QuestionImpactVisualization({ impacts, currentQuestionId }: QuestionImpactVisualizationProps) {
-  // Get the absolute base (estimate with no answers)
-  // Use the first question's base hours as reference, or calculate from empty answers
+  // Get the absolute base (estimate with no answers) - use context-aware base from impacts
+  // The impacts should already have the correct context-aware base hours
   const baseImpact = impacts.find((i) => i.baseHours > 0);
-  const absoluteBase = baseImpact?.baseHours || 192; // Default base if no answers yet (sum of all base task hours)
+  const absoluteBase = baseImpact?.baseHours || 20; // Default to a reasonable base (e.g., 20h for logo projects)
   
   // Calculate total impact from all answered questions
   const totalImpact = impacts
@@ -21,16 +22,16 @@ export function QuestionImpactVisualization({ impacts, currentQuestionId }: Ques
   const currentTotal = absoluteBase + totalImpact;
 
   return (
-    <div className="portfolio-card p-8 border-2 border-gray-200">
+    <div className="bg-white rounded-2xl p-6 shadow-sm">
       <div className="mb-6">
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">Real-Time Impact on Estimate</h3>
-        <p className="text-base text-gray-600 font-medium">
-          See how each answer affects your project hours
+        <h3 className="text-xl font-bold text-gray-900 mb-1">Real-Time Impact</h3>
+        <p className="text-sm text-gray-500">
+          How each answer affects project hours
         </p>
       </div>
 
       {/* Total Impact Summary */}
-      <div className="mb-8 p-6 bg-blue-50 rounded-xl border-2 border-blue-100 shadow-md">
+      <div className="mb-6 p-5 bg-blue-50 rounded-xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-portfolio-blue mb-2">Current Estimate</p>
@@ -76,24 +77,22 @@ export function QuestionImpactVisualization({ impacts, currentQuestionId }: Ques
           return (
             <div
               key={impact.questionId}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl transition-all ${
                 isCurrent
-                  ? 'bg-blue-50 border-portfolio-blue shadow-md'
+                  ? 'bg-blue-50 shadow-sm'
                   : hasImpact
-                  ? 'bg-gray-50 border-gray-200'
-                  : 'bg-white border-gray-100'
+                  ? 'bg-gray-50'
+                  : 'bg-white'
               }`}
             >
               <div className="flex items-start justify-between mb-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-600 mb-1 truncate">
-                    {impact.questionText.length > 60
-                      ? impact.questionText.substring(0, 60) + '...'
-                      : impact.questionText}
+                <div className="flex-1 min-w-0 pr-3">
+                  <p className="text-xs font-medium text-gray-700 mb-1 break-words leading-relaxed">
+                    {impact.questionText}
                   </p>
                 </div>
                 {hasImpact && (
-                  <div className={`flex items-center ml-2 ${
+                  <div className={`flex items-center flex-shrink-0 ${
                     impact.impactHours > 0 ? 'text-red-600' : 'text-green-600'
                   }`}>
                     {impact.impactHours > 0 ? (
@@ -107,11 +106,34 @@ export function QuestionImpactVisualization({ impacts, currentQuestionId }: Ques
                   </div>
                 )}
                 {!hasImpact && isCurrent && (
-                  <div className="flex items-center ml-2 text-gray-400">
+                  <div className="flex items-center flex-shrink-0 text-gray-400">
                     <Minus className="w-4 h-4" />
                   </div>
                 )}
               </div>
+              
+              {/* Detailed Task Breakdown */}
+              {hasImpact && impact.taskBreakdown && impact.taskBreakdown.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">Impact Breakdown:</p>
+                  <div className="space-y-2">
+                    {impact.taskBreakdown.map((task, idx) => (
+                      <div key={idx} className="text-xs bg-white p-2.5 rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-gray-800">{task.taskName}</span>
+                          <span className={`font-semibold ${task.change > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {task.change > 0 ? '+' : ''}{Math.round(task.change)}h
+                          </span>
+                        </div>
+                        <div className="text-gray-600">
+                          <span className="text-xs">{Math.round(task.baseHours)}h → {Math.round(task.newHours)}h</span>
+                          <span className="text-xs italic ml-2">• {task.reason}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {/* Impact Bar */}
               {hasImpact && (

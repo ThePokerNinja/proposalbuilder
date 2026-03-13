@@ -18,7 +18,8 @@ export function useVoiceRecognition({
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
       setIsSupported(false);
@@ -62,15 +63,28 @@ export function useVoiceRecognition({
   }, [onResult, onError, continuous, lang]);
 
   const startListening = () => {
-    if (recognitionRef.current && !isListening) {
-      recognitionRef.current.start();
-      setIsListening(true);
+    try {
+      if (recognitionRef.current && !isListening) {
+        recognitionRef.current.start();
+        setIsListening(true);
+      }
+    } catch (error) {
+      console.error('Error starting voice recognition:', error);
+      setIsListening(false);
+      if (onError) {
+        onError(error as Error);
+      }
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
+    try {
+      if (recognitionRef.current && isListening) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+      }
+    } catch (error) {
+      console.error('Error stopping voice recognition:', error);
       setIsListening(false);
     }
   };

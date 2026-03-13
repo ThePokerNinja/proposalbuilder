@@ -1,4 +1,4 @@
-import { Answer, Question } from '../types';
+import { Answer } from '../types';
 
 export interface ProjectPattern {
   keywords: string[];
@@ -206,7 +206,12 @@ export function learnFromProject(
   // Convert answers to a record
   const answerRecord: Record<string, string | string[]> = {};
   finalAnswers.forEach(answer => {
-    answerRecord[answer.questionId] = answer.value;
+    // Convert number values to string, keep arrays and strings as-is
+    if (typeof answer.value === 'number') {
+      answerRecord[answer.questionId] = String(answer.value);
+    } else {
+      answerRecord[answer.questionId] = answer.value as string | string[];
+    }
   });
 
   // Find or create matching pattern

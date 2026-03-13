@@ -1,16 +1,19 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Task, Estimate } from '../types';
+import { Task, Estimate, Answer } from '../types';
 
 interface SOWData {
   projectName: string;
   projectSummary: string;
+  problemStatement?: string;
+  measureOfSuccess?: string;
   estimate: Estimate;
   tasks: Task[];
   timeline: { weeks: number; startDate: Date; endDate: Date };
+  answers?: Answer[];
 }
 
-export function exportToSOWPDF(data: SOWData) {
+export function exportToSOWPDF(data: SOWData, returnBlob: boolean = false): Blob | void {
   const doc = new jsPDF();
 
   // Colors matching SCS branding
@@ -141,7 +144,57 @@ export function exportToSOWPDF(data: SOWData) {
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.text('PROJECT OVERVIEW', 20, yPos);
-  yPos += 10;
+  yPos += 8;
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  const overviewLines = doc.splitTextToSize(data.projectSummary || `This proposal outlines the scope, timeline, and investment for ${data.projectName}.`, 170);
+  doc.text(overviewLines, 20, yPos);
+  yPos += overviewLines.length * 5 + 8;
+
+  // === PROBLEM STATEMENT ===
+  if (data.problemStatement) {
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PROBLEM STATEMENT', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const problemLines = doc.splitTextToSize(data.problemStatement, 170);
+    doc.text(problemLines, 20, yPos);
+    yPos += problemLines.length * 5 + 8;
+  }
+
+  // === MEASURE OF SUCCESS ===
+  if (data.measureOfSuccess) {
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('MEASURE OF SUCCESS', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const successLines = doc.splitTextToSize(data.measureOfSuccess, 170);
+    doc.text(successLines, 20, yPos);
+    yPos += successLines.length * 5 + 8;
+  }
+
+  // === STRATEGY ===
+  if (data.answers && data.answers.length > 0) {
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('STRATEGY', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    
+    const strategyText = generateStrategyFromAnswers(data.projectName, data.answers);
+    const strategyLines = doc.splitTextToSize(strategyText, 170);
+    doc.text(strategyLines, 20, yPos);
+    yPos += strategyLines.length * 5 + 8;
+  }
 
   // === PROJECT OBJECTIVES ===
   doc.setFontSize(13);
@@ -452,9 +505,78 @@ export function exportToSOWPDF(data: SOWData) {
     doc.text(`Page ${i} of ${pageCount}`, 195, 290, { align: 'right' });
   }
 
-  // Save PDF
+  // Save PDF or return as blob
   const fileName = `SOW-${data.projectName.replace(/\s+/g, '-')}-${new Date()
     .toISOString()
     .split('T')[0]}.pdf`;
-  doc.save(fileName);
+  
+  if (returnBlob) {
+    return doc.output('blob') as Blob;
+  } else {
+    doc.save(fileName);
+  }
+}
+
+/**
+ * Generate strategy section from answers
+ */
+function generateStrategyFromAnswers(projectName: string, answers: Answer[]): string {
+  const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
+  
+  let strategy = `Our strategic approach for ${projectName} is designed to deliver measurable business results. `;
+  
+  // Problem statement
+  const problemStatement = answerMap.get('problem-statement');
+  if (problemStatement && typeof problemStatement === 'string') {
+    strategy += `We understand that your primary challenge is: ${problemStatement}. `;
+  }
+  
+  // Target audience
+  const targetAudience = answerMap.get('target-audience');
+  if (targetAudience && typeof targetAudience === 'string') {
+    strategy += `Our strategy is specifically tailored to engage and convert ${targetAudience}. `;
+  }
+  
+  // Business value
+  const businessValue = answerMap.get('business-value');
+  if (businessValue) {
+    const values = Array.isArray(businessValue) ? businessValue : [businessValue];
+    if (values.length > 0) {
+      strategy += `We will focus on delivering measurable outcomes including ${values.slice(0, 3).join(', ')}. `;
+    }
+  }
+  
+  // User journey
+  const userJourney = answerMap.get('user-journey');
+  if (userJourney) {
+    const journeys = Array.isArray(userJourney) ? userJourney : [userJourney];
+    if (journeys.length > 0) {
+      strategy += `The user experience will prioritize ${journeys.slice(0, 2).join(' and ')}. `;
+    }
+  }
+  
+  // Current state
+  const currentState = answerMap.get('current-state');
+  if (currentState && typeof currentState === 'string') {
+    if (currentState.includes('Starting from scratch')) {
+      strategy += `Given that we're building from the ground up, our strategy includes comprehensive discovery and foundational brand development. `;
+    } else if (currentState.includes('overhaul')) {
+      strategy += `Our strategy recognizes the need for a complete transformation while preserving valuable existing assets. `;
+    } else if (currentState.includes('enhancement')) {
+      strategy += `Our approach will strategically enhance your existing foundation with targeted improvements. `;
+    }
+  }
+  
+  // Technical requirements
+  const technicalReqs = answerMap.get('technical-requirements');
+  if (technicalReqs) {
+    const reqs = Array.isArray(technicalReqs) ? technicalReqs : [technicalReqs];
+    if (reqs.length > 0 && !reqs.includes('No special technical requirements')) {
+      strategy += `From a technical perspective, we will implement ${reqs.slice(0, 2).join(' and ')} to ensure scalability and performance. `;
+    }
+  }
+  
+  strategy += `This strategic foundation ensures every design decision, development choice, and content strategy aligns with your business objectives and delivers maximum ROI.`;
+  
+  return strategy;
 }

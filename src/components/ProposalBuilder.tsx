@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, Answer, Estimate } from '../types';
 import { QUESTIONS } from '../config/questions';
-import { createEstimate } from '../utils/estimateEngine';
+import { createEstimate, calculateTimeline } from '../utils/estimateEngine';
 import { QuestionCard } from './QuestionCard';
 import { EstimateVisualization } from './EstimateVisualization';
 import { QuestionImpactVisualization } from './QuestionImpactVisualization';
@@ -14,14 +14,25 @@ import {
   getLearningData,
   saveLearningData 
 } from '../utils/learningEngine';
+import { runMarketResearch, MarketResearchResult } from '../utils/marketResearch';
 import { generatePersonalizedQuestions } from '../utils/questionGenerator';
-import { ArrowLeft, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { VoiceInput } from './VoiceInput';
+import { ArrowLeft, ArrowRight, Sparkles, X, AlertTriangle } from 'lucide-react';
+
+const TAGLINE_MESSAGES = [
+  'A Voice Enabled AI-Powered Planning Partner',
+  'Click to Get Started',
+];
 
 export function ProposalBuilder() {
   const [projectName, setProjectName] = useState('');
   const [projectContext, setProjectContext] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [projectCategory, setProjectCategory] = useState('branding package');
+  const [projectPriority, setProjectPriority] = useState<'urgent' | 'within-month' | 'no-rush'>('within-month');
   const [showSummaryField, setShowSummaryField] = useState(false);
-  const [hasStartedQuestions, setHasStartedQuestions] = useState(false);
+  // Flow: 'intro' -> 'research' -> 'questions' (estimate handled separately)
+  const [flowStep, setFlowStep] = useState<'intro' | 'research' | 'questions'>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
@@ -29,14 +40,21 @@ export function ProposalBuilder() {
   const [projectAnalysis, setProjectAnalysis] = useState<ReturnType<typeof analyzeProjectInput> | null>(null);
   const [predictions, setPredictions] = useState<Partial<Record<string, string | string[]>>>({});
   const [personalizedQuestions, setPersonalizedQuestions] = useState<Question[]>([]);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [marketResearch, setMarketResearch] = useState<MarketResearchResult | null>(null);
+  const analysisTimeoutRef = useRef<number | null>(null);
+  const [taglineMessageIndex, setTaglineMessageIndex] = useState(0);
+  const [typedTagline, setTypedTagline] = useState('');
 
   // Generate personalized questions when project name/summary is available
+  // Update questions dynamically as answers come in to filter irrelevant ones
   useEffect(() => {
     if (projectName.trim() || projectContext.trim()) {
-      const questions = generatePersonalizedQuestions(projectName, projectContext);
+      const questions = generatePersonalizedQuestions(projectName, projectContext, answers);
       setPersonalizedQuestions(questions);
     }
-  }, [projectName, projectContext]);
+  }, [projectName, projectContext, answers]);
 
   // Use personalized questions if available, otherwise fall back to default
   const questions = personalizedQuestions.length > 0 ? personalizedQuestions : QUESTIONS;
@@ -44,7 +62,27 @@ export function ProposalBuilder() {
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.id);
   const learningData = useMemo(() => getLearningData(), []);
 
-  // Analyze project input when name or context changes
+  // Sticky top bar with voice agent + animated tagline
+  const TopBar = () => (
+    <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-auto">
+      <div className="max-w-5xl mx-auto flex flex-col items-center gap-3">
+        <VoiceInput
+          onFormDataUpdate={handleVoiceFormDataUpdate}
+          onError={(error) => {
+            console.error('Voice input error:', error);
+          }}
+        />
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide min-w-[260px] justify-center">
+          <Sparkles className="w-3 h-3 text-[#FFD700]" />
+          <span className="whitespace-nowrap">
+            {typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+
+  // Analyze project input when key fields change (debounced) so AI Insights feel responsive
   useEffect(() => {
     if (projectName.trim() && !showSummaryField) {
       // Reveal summary field after a short delay for a subtle staged animation
@@ -52,31 +90,66 @@ export function ProposalBuilder() {
       return () => clearTimeout(timer);
     }
 
-    if (projectName.trim() || projectContext.trim()) {
-      const analysis = analyzeProjectInput(projectName, projectContext);
+    // If there is no meaningful input, clear insights
+    if (!(projectName.trim() || projectContext.trim() || jobTitle.trim())) {
+      setProjectAnalysis(null);
+      setPredictions({});
+      setIsAnalyzing(false);
+      if (analysisTimeoutRef.current !== null) {
+        window.clearTimeout(analysisTimeoutRef.current);
+        analysisTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // User is typing: show "thinking..." immediately
+    setIsAnalyzing(true);
+
+    // Debounce the heavy analysis so it runs after the user pauses
+    if (analysisTimeoutRef.current !== null) {
+      window.clearTimeout(analysisTimeoutRef.current);
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const priorityLabel =
+        projectPriority === 'urgent'
+          ? 'urgent'
+          : projectPriority === 'within-month'
+          ? 'within the month'
+          : 'no rush';
+
+      const enrichedContext = [
+        projectContext,
+        jobTitle ? `Job title: ${jobTitle}.` : '',
+        `Project category: ${projectCategory}.`,
+        `Priority: ${priorityLabel}.`,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const analysis = analyzeProjectInput(projectName, enrichedContext);
       setProjectAnalysis(analysis);
       const preds = generatePredictions(analysis, learningData || undefined);
       setPredictions(preds);
-    }
-  }, [projectName, projectContext, learningData]);
+      setIsAnalyzing(false);
+      analysisTimeoutRef.current = null;
+    }, 500); // 500ms pause before committing analysis
 
-  // Auto-fill predictions when starting questions
-  useEffect(() => {
-    if (hasStartedQuestions && Object.keys(predictions).length > 0 && answers.length === 0) {
-      const initialAnswers: Answer[] = Object.entries(predictions).map(([questionId, value]) => ({
-        questionId,
-        value,
-      }));
-      if (initialAnswers.length > 0) {
-        setAnswers(initialAnswers);
+    analysisTimeoutRef.current = timeoutId;
+
+    return () => {
+      if (analysisTimeoutRef.current !== null) {
+        window.clearTimeout(analysisTimeoutRef.current);
       }
-    }
-  }, [hasStartedQuestions, predictions]);
+    };
+  }, [projectName, projectContext, jobTitle, projectCategory, projectPriority, learningData, showSummaryField]);
 
-  // Calculate impacts for visualization
+  // (Predictions are applied when starting the flow in handleStartQuestions)
+
+  // Calculate impacts for visualization - now context-aware
   const questionImpacts = useMemo(() => {
-    return calculateAllQuestionImpacts(answers);
-  }, [answers]);
+    return calculateAllQuestionImpacts(answers, projectName, projectContext, questions);
+  }, [answers, projectName, projectContext, questions]);
 
   const handleAnswer = (answer: Answer) => {
     const updatedAnswers = answers.filter((a) => a.questionId !== answer.questionId);
@@ -86,27 +159,41 @@ export function ProposalBuilder() {
   };
 
   const handleStartQuestions = () => {
-    if (projectName.trim()) {
-      // Generate personalized questions first
+    if (!projectName.trim()) {
+      alert('Please enter a project name');
+      return;
+    }
+
+    // ALWAYS set placeholder research data FIRST to prevent white screen
+    setMarketResearch({
+      marketSummary: 'Preparing market analysis...',
+      competitiveLandscape: 'Evaluating competitive landscape...',
+      bestPractices: 'Analyzing best practices...',
+      strategicRecommendations: 'Generating strategic recommendations...',
+      metrics: {
+        competitiveIntensity: 70,
+        differentiationOpportunity: 30,
+        uxElevationNeeded: 75,
+        timelinePressure: 60,
+      },
+    });
+
+    // ALWAYS move to research step FIRST - this must happen immediately
+    setFlowStep('research');
+
+    // Then do async work in the background
+    try {
+      // Generate personalized questions and initial predictions as before
       const questions = generatePersonalizedQuestions(projectName, projectContext);
       setPersonalizedQuestions(questions);
-      
-      // Analyze project and generate initial predictions
+
       const analysis = analyzeProjectInput(projectName, projectContext);
       setProjectAnalysis(analysis);
       const preds = generatePredictions(analysis, learningData || undefined);
       setPredictions(preds);
-      
-      // Pre-fill answers based on predictions (mapped to new question IDs)
-      if (Object.keys(preds).length > 0) {
-        const initialAnswers: Answer[] = Object.entries(preds).map(([questionId, value]) => ({
-          questionId,
-          value,
-        }));
-        setAnswers(initialAnswers);
-      }
-      
-      setHasStartedQuestions(true);
+    } catch (error) {
+      console.error('Error in handleStartQuestions:', error);
+      // Don't block the flow on errors
     }
   };
 
@@ -125,7 +212,7 @@ export function ProposalBuilder() {
   };
 
   const generateEstimate = () => {
-    const newEstimate = createEstimate(answers);
+    const newEstimate = createEstimate(answers, projectName, projectContext);
     setEstimate(newEstimate);
     setShowEstimate(true);
     
@@ -149,10 +236,11 @@ export function ProposalBuilder() {
     );
 
     const totalHours = updatedTasks.reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
-    const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference');
     
     // Recalculate timeline based on new total hours
-    const timeline = estimate.timeline; // Keep same timeline structure, or recalculate if needed
+    const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
+    const timelineValue = timelineAnswer?.value as string | undefined;
+    const timeline = calculateTimeline(totalHours, timelineValue);
 
     setEstimate({
       ...estimate,
@@ -166,42 +254,260 @@ export function ProposalBuilder() {
     setShowEstimate(false);
   };
 
-  const progress = hasStartedQuestions 
+  // Back behavior from question card:
+  // - On first question, go back to Step 2 (research)
+  // - Otherwise, go to previous question
+  const handleQuestionBack = () => {
+    if (currentQuestionIndex === 0) {
+      setFlowStep('research');
+    } else {
+      handlePrevious();
+    }
+  };
+
+  // Check if form is complete (all required fields filled)
+  const isFormComplete = useMemo(() => {
+    return !!(
+      jobTitle.trim() &&
+      projectCategory.trim() &&
+      projectPriority &&
+      projectName.trim() &&
+      projectContext.trim()
+    );
+  }, [jobTitle, projectCategory, projectPriority, projectName, projectContext]);
+
+  // Handle voice input form data updates
+  const handleVoiceFormDataUpdate = (data: {
+    jobTitle?: string;
+    projectCategory?: string;
+    projectPriority?: 'urgent' | 'within-month' | 'no-rush';
+    projectName?: string;
+    projectSummary?: string;
+  }) => {
+    // Update fields immediately as they come in
+    if (data.jobTitle) setJobTitle(data.jobTitle);
+    if (data.projectCategory) setProjectCategory(data.projectCategory);
+    if (data.projectPriority) setProjectPriority(data.projectPriority);
+    if (data.projectName) setProjectName(data.projectName);
+    if (data.projectSummary) setProjectContext(data.projectSummary);
+  };
+
+  const handleResetToStart = () => {
+    // Reset all state to initial values
+    setProjectName('');
+    setProjectContext('');
+    setShowSummaryField(false);
+    setFlowStep('intro');
+    setCurrentQuestionIndex(0);
+    setAnswers([]);
+    setEstimate(null);
+    setShowEstimate(false);
+    setProjectAnalysis(null);
+    setPredictions({});
+    setPersonalizedQuestions([]);
+    setShowResetModal(false);
+  };
+
+  const handleLogoClick = () => {
+    // Always show modal - user can start over at any time
+    setShowResetModal(true);
+  };
+
+  const progress = flowStep === 'questions' 
     ? ((currentQuestionIndex + 1) / questions.length) * 100 
     : 0;
-  const allQuestionsAnswered = answers.length === questions.length;
+  // Check if all questions are answered (accounting for text questions which might be empty)
 
-  // Project setup screen (before questions)
-  if (!hasStartedQuestions) {
+  // Run market research when Step 2 is active and inputs change
+  useEffect(() => {
+    if (flowStep === 'research') {
+      // Immediately set placeholder data to prevent white screen
+      if (!marketResearch) {
+        setMarketResearch({
+          marketSummary: 'Preparing market analysis...',
+          competitiveLandscape: 'Evaluating competitive landscape...',
+          bestPractices: 'Analyzing best practices...',
+          strategicRecommendations: 'Generating strategic recommendations...',
+          metrics: {
+            competitiveIntensity: 70,
+            differentiationOpportunity: 30,
+            uxElevationNeeded: 75,
+            timelinePressure: 60,
+          },
+        });
+      }
+
+      if (projectName.trim()) {
+        const priorityLabel =
+          projectPriority === 'urgent'
+            ? 'urgent'
+            : projectPriority === 'within-month'
+            ? 'within the month'
+            : 'no rush';
+        
+        // Small delay to show "thinking" state
+        const timer = setTimeout(() => {
+          try {
+            const result = runMarketResearch(projectName, projectContext, projectCategory, priorityLabel, jobTitle);
+            setMarketResearch(result);
+          } catch (error) {
+            console.error('Error running market research:', error);
+            // Set a fallback result to prevent white screen
+            setMarketResearch({
+              marketSummary: 'Market analysis is being prepared...',
+              competitiveLandscape: 'Competitive landscape evaluation in progress...',
+              bestPractices: 'Best practices analysis underway...',
+              strategicRecommendations: 'Strategic recommendations being generated...',
+              metrics: {
+                competitiveIntensity: 70,
+                differentiationOpportunity: 30,
+                uxElevationNeeded: 75,
+                timelinePressure: 60,
+              },
+            });
+          }
+        }, 300);
+        
+        return () => clearTimeout(timer);
+      } else {
+        // No project name - show placeholder
+        setMarketResearch({
+          marketSummary: 'Please provide a project name to begin market analysis.',
+          competitiveLandscape: 'Competitive analysis will be generated based on your project details.',
+          bestPractices: 'Best practices will be tailored to your specific project category.',
+          strategicRecommendations: 'Strategic recommendations will be provided once project details are available.',
+          metrics: {
+            competitiveIntensity: 70,
+            differentiationOpportunity: 30,
+            uxElevationNeeded: 75,
+            timelinePressure: 60,
+          },
+        });
+      }
+    }
+  }, [flowStep, projectName, projectContext, projectCategory, projectPriority, jobTitle]);
+
+  // Typewriter effect for tagline, cycling between two messages
+  useEffect(() => {
+    const fullText = TAGLINE_MESSAGES[taglineMessageIndex];
+
+    // Still typing current message
+    if (typedTagline.length < fullText.length) {
+      const id = window.setTimeout(() => {
+        setTypedTagline(fullText.slice(0, typedTagline.length + 1));
+      }, 45); // typing speed
+      return () => window.clearTimeout(id);
+    }
+
+    // Message complete – wait, then switch to next
+    const pauseId = window.setTimeout(() => {
+      const nextIndex = (taglineMessageIndex + 1) % TAGLINE_MESSAGES.length;
+      setTaglineMessageIndex(nextIndex);
+      setTypedTagline('');
+    }, 2200);
+
+    return () => window.clearTimeout(pauseId);
+  }, [typedTagline, taglineMessageIndex]);
+
+  // Toggle tagline text every 4 seconds
+  // Project setup screen (Step 1)
+  if (flowStep === 'intro') {
     return (
-      <div className="min-h-screen portfolio-bg py-12 px-4">
-        <div className="max-w-2xl mx-auto">
-          {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <img 
-              src="/assets/logo.png" 
-              alt="Logo" 
-              className="h-20 w-20 object-contain drop-shadow-lg"
-              onError={(e) => {
-                // Fallback if logo not found
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </div>
-          <div className="text-center mb-10">
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4 tracking-tight">
-              Proposal Builder
+      <div className="min-h-screen portfolio-bg pb-12 px-4 relative overflow-hidden">
+        <TopBar />
+
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-32 left-10 w-72 h-72 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        </div>
+        
+        <div className="max-w-3xl mx-auto relative z-10 mt-10">
+          {/* Hero Section with gradient text */}
+          <div className="text-center mb-16 animate-slide-up">
+            <h1 className="text-6xl md:text-7xl lg:text-8xl font-extrabold mb-6 tracking-tight">
+              <span className="bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent animate-gradient">
+                Proposal Builder
+              </span>
             </h1>
-            <p className="text-xl text-white/90 font-light">
-              Let's start by naming your project
+            <p className="text-2xl md:text-3xl text-white/95 font-light mb-2 max-w-2xl mx-auto leading-relaxed">
+              Transform your vision into a
             </p>
+            <p className="text-2xl md:text-3xl text-[#FFD700] font-semibold mb-8 max-w-2xl mx-auto">
+              transparent, strategic project estimate
+            </p>
+            <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span>Real-time estimates • Industry-standard rates • AI-powered insights</span>
+            </div>
           </div>
 
-          <div className="portfolio-card p-8 md:p-10 space-y-8">
+          {/* Enhanced Card with gradient border */}
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl p-10 md:p-12 space-y-10 shadow-2xl border border-white/20">
+            {/* Top row: job title / project category / priority */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Job title */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Job title
+                </label>
+                <input
+                  type="text"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  placeholder="e.g., Senior Producer, Marketing Lead"
+                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white placeholder:text-gray-400"
+                />
+              </div>
+
+              {/* Project category */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Project category
+                </label>
+                <select
+                  value={projectCategory}
+                  onChange={(e) => setProjectCategory(e.target.value)}
+                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
+                >
+                  <option value="branding package">Branding package</option>
+                  <option value="social media">Social media</option>
+                  <option value="motion graphics/video">Motion graphics / video</option>
+                  <option value="mobile site">Mobile site</option>
+                  <option value="pitch deck">Pitch deck</option>
+                  <option value="mobile app">Mobile app</option>
+                  <option value="plugin">Plugin</option>
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Priority
+                </label>
+                <select
+                  value={projectPriority}
+                  onChange={(e) =>
+                    setProjectPriority(
+                      e.target.value as 'urgent' | 'within-month' | 'no-rush'
+                    )
+                  }
+                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
+                >
+                  <option value="urgent">Urgent</option>
+                  <option value="within-month">Within the month</option>
+                  <option value="no-rush">No rush</option>
+                </select>
+              </div>
+            </div>
+
             {/* Project Name */}
             <div className="transition-all duration-500 ease-out transform opacity-100 translate-y-0">
-              <label htmlFor="project-name" className="block text-sm font-semibold text-gray-700 mb-2">
-                Project Name <span className="text-red-500">*</span>
+              <label htmlFor="project-name" className="block text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-gradient-to-r from-[#FFD700] to-blue-500 rounded-full"></span>
+                Project Name <span className="text-red-500 text-lg">*</span>
               </label>
               <input
                 id="project-name"
@@ -209,7 +515,7 @@ export function ProposalBuilder() {
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 placeholder="e.g., E-commerce Website Redesign"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white font-medium placeholder:text-gray-400"
               />
             </div>
 
@@ -221,12 +527,50 @@ export function ProposalBuilder() {
                   : 'opacity-0 -translate-y-2 max-h-0 overflow-hidden pointer-events-none'
               }`}
             >
-              <label htmlFor="project-context" className="block text-sm font-semibold text-gray-700 mb-2">
-                Project Summary <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+              <label htmlFor="project-context" className="block text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></span>
+                Project Summary <span className="text-gray-400 text-sm font-normal">(Optional)</span>
                 {projectAnalysis && (
-                  <span className="ml-2 text-xs text-portfolio-blue font-medium">
-                    • AI analysis active
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const parts: string[] = [];
+
+                      if (jobTitle.trim()) {
+                        parts.push(
+                          `As a ${jobTitle.trim()}, you are sponsoring a ${projectCategory} engagement that needs to be both creatively strong and operationally sound.`
+                        );
+                      } else {
+                        parts.push(
+                          `You are sponsoring a ${projectCategory} engagement that needs to be both creatively strong and operationally sound.`
+                        );
+                      }
+
+                      parts.push(
+                        `The core objective is to create a clear, modern experience for ${projectName || 'this project'} that reflects the brand at a high standard while driving measurable outcomes.`
+                      );
+
+                      if (projectPriority === 'urgent') {
+                        parts.push(
+                          'Timeline is critical; the work needs to move quickly while still protecting quality and alignment with stakeholders.'
+                        );
+                      } else if (projectPriority === 'within-month') {
+                        parts.push(
+                          'The project should move efficiently over the next few weeks with enough space for collaboration and iteration.'
+                        );
+                      } else {
+                        parts.push(
+                          'There is room to move thoughtfully, validating decisions and sequencing work in a way that reduces risk.'
+                        );
+                      }
+
+                      setProjectContext(parts.join(' '));
+                    }}
+                    className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-portfolio-blue rounded-full text-xs font-semibold border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Generate with AI
+                  </button>
                 )}
               </label>
               <textarea
@@ -235,69 +579,302 @@ export function ProposalBuilder() {
                 onChange={(e) => setProjectContext(e.target.value)}
                 placeholder="Provide a summary of your project, goals, or requirements... The more details you share, the more accurate our AI-powered assessment will be."
                 rows={6}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                className="w-full px-6 py-4 text-base border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white resize-none placeholder:text-gray-400 leading-relaxed"
               />
               <p className="mt-2 text-xs text-gray-500">
                 This helps our AI learning system better understand and anticipate your project needs
               </p>
-              {projectAnalysis && Object.keys(predictions).length > 0 && (
+              {(projectName.trim() || projectContext.trim() || jobTitle.trim()) && (
                 <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-xs font-semibold text-gray-700 mb-1">AI Insights:</p>
-                  <ul className="text-xs text-gray-600 space-y-1">
-                    {projectAnalysis.projectType && (
-                      <li>• Detected project type: <span className="font-medium">{projectAnalysis.projectType}</span></li>
-                    )}
-                    {projectAnalysis.complexity && (
-                      <li>• Complexity level: <span className="font-medium">{projectAnalysis.complexity}</span></li>
-                    )}
-                    {projectAnalysis.industry && (
-                      <li>• Industry: <span className="font-medium">{projectAnalysis.industry}</span></li>
-                    )}
-                    {projectAnalysis.features.length > 0 && (
-                      <li>• Features detected: <span className="font-medium">{projectAnalysis.features.join(', ')}</span></li>
-                    )}
-                  </ul>
+                  {isAnalyzing ? (
+                    <div className="flex items-center gap-2 text-[11px] text-portfolio-blue transition-opacity duration-300 opacity-100">
+                      <span className="w-2 h-2 rounded-full bg-portfolio-blue animate-ping" />
+                      <span className="animate-pulse">Thinking&hellip;</span>
+                    </div>
+                  ) : projectAnalysis && Object.keys(predictions).length > 0 ? (
+                    <ul className="text-xs text-gray-600 space-y-1">
+                      {projectAnalysis.projectType && (
+                        <li>
+                          • Detected project type:{' '}
+                          <span className="font-medium">{projectAnalysis.projectType}</span>
+                        </li>
+                      )}
+                      {projectAnalysis.complexity && (
+                        <li>
+                          • Complexity level:{' '}
+                          <span className="font-medium">{projectAnalysis.complexity}</span>
+                        </li>
+                      )}
+                      {projectAnalysis.industry && (
+                        <li>
+                          • Industry:{' '}
+                          <span className="font-medium">{projectAnalysis.industry}</span>
+                        </li>
+                      )}
+                      {projectAnalysis.features.length > 0 && (
+                        <li>
+                          • Features detected:{' '}
+                          <span className="font-medium">
+                            {projectAnalysis.features.join(', ')}
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-gray-500">
+                      Start typing above to generate AI insights about this project.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
             <button
               onClick={handleStartQuestions}
-              disabled={!projectName.trim()}
-              className="w-full flex items-center justify-center px-8 py-4 bg-[#FFD700] text-black border-2 border-[#FFD700] rounded-lg font-semibold text-lg hover:bg-[#FFC700] hover:border-[#FFC700] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 disabled:border-gray-300 transition-all shadow-lg hover:shadow-xl"
+              disabled={!isFormComplete}
+              className={`w-full group relative flex items-center justify-center px-8 py-5 rounded-xl font-bold text-lg transition-all duration-300 shadow-2xl hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
+                isFormComplete
+                  ? 'bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700] text-black hover:from-[#FFC700] hover:via-[#FFD700] hover:to-[#FFC700] hover:shadow-[#FFD700]/50'
+                  : 'bg-gradient-to-r from-gray-300 via-gray-400 to-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
             >
-              Begin Project Visualization
-              <ArrowRight className="w-5 h-5 ml-2" />
+              <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
+              <span className="relative flex items-center gap-3">
+                Begin Project Visualization
+                <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+              </span>
             </button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  // Strategic market & competitive research screen (Step 2)
+  if (flowStep === 'research') {
+    // Ensure we always have some research data to display
+    const displayResearch = marketResearch || {
+      marketSummary: 'Preparing market analysis...',
+      competitiveLandscape: 'Evaluating competitive landscape...',
+      bestPractices: 'Analyzing best practices...',
+      strategicRecommendations: 'Generating strategic recommendations...',
+      metrics: {
+        competitiveIntensity: 70,
+        differentiationOpportunity: 30,
+        uxElevationNeeded: 75,
+        timelinePressure: 60,
+      },
+    };
+
+    return (
+      <div className="min-h-screen portfolio-bg pb-12 px-4">
+        <TopBar />
+        <div className="max-w-5xl mx-auto pt-10">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 md:p-8 space-y-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 mb-1">
+                  Step 2 · Strategic Market Review
+                </p>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-1">
+                  Market fit & competitive evaluation
+                </h2>
+                <p className="text-sm text-gray-600 mt-2 max-w-2xl">
+                  Using your project name and summary, we infer the most relevant market, scan similar initiatives,
+                  and synthesize best practices so the proposal is grounded in real competitive context.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Market Context */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">Market context</h3>
+                  <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 rounded-full">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-[10px] font-semibold text-blue-700">Active</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed">{displayResearch.marketSummary}</p>
+                
+                {/* Market Growth Indicator */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-medium text-gray-600">Market growth potential</span>
+                    <span className="text-[10px] font-bold text-gray-900">
+                      {Math.round(100 - displayResearch.metrics.competitiveIntensity * 0.6)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600"
+                      style={{ width: `${Math.round(100 - displayResearch.metrics.competitiveIntensity * 0.6)}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-gray-500 mt-1">Based on category analysis</p>
+                </div>
+              </div>
+
+              {/* Competitive Landscape */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">Competitive landscape</h3>
+                  <div className="px-2 py-1 bg-amber-100 rounded-full">
+                    <span className="text-[10px] font-semibold text-amber-700">
+                      {displayResearch.metrics.competitiveIntensity}/100
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed">{displayResearch.competitiveLandscape}</p>
+                
+                {/* Competitive Intensity Visual */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-medium text-gray-600">Competitive intensity</span>
+                    <span className="text-[10px] font-bold text-gray-900">
+                      {displayResearch.metrics.competitiveIntensity}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-red-500"
+                      style={{ width: `${displayResearch.metrics.competitiveIntensity}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-gray-500 mt-1">
+                    {displayResearch.metrics.competitiveIntensity > 80 ? 'Highly competitive' : 
+                     displayResearch.metrics.competitiveIntensity > 60 ? 'Moderately competitive' : 
+                     'Less competitive'} market
+                  </p>
+                </div>
+              </div>
+
+              {/* Best Practice Signals */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">Best‑practice signals</h3>
+                  <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 rounded-full">
+                    <span className="text-[10px] font-semibold text-purple-700">
+                      {Math.round(displayResearch.metrics.uxElevationNeeded * 0.85)}% adoption
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed">{displayResearch.bestPractices}</p>
+                
+                {/* Best Practice Adoption Rate */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-medium text-gray-600">Industry best practice adoption</span>
+                    <span className="text-[10px] font-bold text-gray-900">
+                      {Math.round(displayResearch.metrics.uxElevationNeeded * 0.85)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-400 to-indigo-600"
+                      style={{ width: `${Math.round(displayResearch.metrics.uxElevationNeeded * 0.85)}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-gray-500 mt-1">Based on 2024 industry standards</p>
+                </div>
+              </div>
+
+              {/* Strategic Recommendation */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">Strategic recommendation</h3>
+                  <div className="flex items-center gap-1 px-2 py-1 bg-green-100 rounded-full">
+                    <span className="text-[10px] font-semibold text-green-700">
+                      {Math.round((displayResearch.metrics.differentiationOpportunity + 20) * 0.9)}% confidence
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed">{displayResearch.strategicRecommendations}</p>
+                
+                {/* Strategic Alignment Score */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-medium text-gray-600">Strategic alignment score</span>
+                    <span className="text-[10px] font-bold text-gray-900">
+                      {Math.round((displayResearch.metrics.differentiationOpportunity + 20) * 0.9)}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-green-400 to-emerald-600"
+                      style={{ width: `${Math.round((displayResearch.metrics.differentiationOpportunity + 20) * 0.9)}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-gray-500 mt-1">Project fit & opportunity alignment</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <button
+                onClick={() => setFlowStep('intro')}
+                className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back
+              </button>
+              <button
+                onClick={() => {
+                  // User is leaving Step 2 to start questions: clear answers and reset index
+                  setAnswers([]);
+                  setCurrentQuestionIndex(0);
+                  setFlowStep('questions');
+                }}
+                className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-portfolio-blue font-semibold text-sm shadow-md hover:bg-gray-50"
+              >
+                Continue to questions
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Estimate/Dashboard screen (after questions are answered) - check BEFORE questions
   if (showEstimate && estimate) {
     return (
-      <div className="min-h-screen portfolio-bg py-12 px-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <img 
-              src="/assets/logo.png" 
-              alt="Logo" 
-              className="h-20 w-20 object-contain drop-shadow-lg"
-              onError={(e) => {
-                // Fallback if logo not found
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
+      <div className="min-h-screen portfolio-bg pb-12 px-4">
+        <TopBar />
+        <div className="max-w-6xl mx-auto pt-10">
+          {/* Top actions row: Back, Start over, Export */}
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={handleBackToQuestions}
+              className="flex items-center text-white/90 hover:text-white transition-colors font-medium"
+            >
+              <ArrowLeft className="w-5 h-5 mr-2" />
+              Back to Questions
+            </button>
+
+            <div className="flex items-center gap-4 text-sm">
+              <button
+                onClick={handleResetToStart}
+                className="text-white/80 hover:text-white underline-offset-4 hover:underline transition-colors"
+              >
+                Start over
+              </button>
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('proposalbuilder:export-sow'));
+                  }
+                }}
+                className="text-white/90 hover:text-white font-semibold underline-offset-4 hover:underline transition-colors"
+              >
+                Export
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleBackToQuestions}
-            className="mb-6 flex items-center text-white/90 hover:text-white transition-colors font-medium"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to Questions
-          </button>
           <EstimateVisualization
             tasks={estimate.tasks}
             totalHours={estimate.totalHours}
@@ -309,139 +886,166 @@ export function ProposalBuilder() {
                 .filter((t) => t.selected !== false)
                 .reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
               
+              // Recalculate timeline based on new total hours
+              const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
+              const timelineValue = timelineAnswer?.value as string | undefined;
+              const newTimeline = calculateTimeline(newTotalHours, timelineValue);
+              
               setEstimate({
                 ...estimate,
                 tasks: updatedTasks,
                 totalHours: newTotalHours,
+                timeline: newTimeline,
               });
             }}
             projectName={projectName}
             projectSummary={projectContext}
+            answers={answers}
+            marketResearch={marketResearch}
           />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen portfolio-bg py-12 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column (2/3): Main Question Area */}
-          <div className="lg:col-span-2">
-            {/* Logo */}
-            <div className="flex justify-start mb-8">
-              <img 
-                src="/assets/logo.png" 
-                alt="Logo" 
-                className="h-16 w-16 object-contain"
-                onError={(e) => {
-                  // Fallback if logo not found
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            </div>
-
-            {/* Header */}
-            <div className="text-left mb-8">
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
-                Proposal Builder
-              </h1>
-              <p className="text-lg text-white/90 mb-4 font-light">
-                Answer a few strategic questions to get a transparent project estimate
-              </p>
-              {projectAnalysis && (
-                <div className="mt-4 inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
-                  <Sparkles className="w-4 h-4 text-white" />
-                  <span className="text-sm text-white/90 font-medium">
-                    AI-powered personalization active
+  // Questions screen (flowStep === 'questions')
+  if (flowStep === 'questions') {
+    return (
+      <>
+        <div className="min-h-screen portfolio-bg pb-12 px-4">
+          <TopBar />
+          <div className="max-w-6xl mx-auto pt-10">
+            {/* Header Row - Full Width */}
+            <div className="mb-8">
+              {/* Header */}
+              <div className="text-left">
+                <div className="flex items-end gap-3 mb-4">
+                  <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
+                    Proposal Builder
+                  </h1>
+                  <span className="text-sm text-white/70 font-medium pb-1">
+                    AI-powered
                   </span>
                 </div>
-              )}
-              <div className="w-full bg-white/20 rounded-full h-3 max-w-md backdrop-blur-sm mt-4">
-                <div
-                  className="bg-white h-3 rounded-full transition-all duration-300 shadow-lg"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="text-sm text-white/80 mt-3 font-medium">
-                {currentQuestionIndex + 1} of {questions.length} questions
-              </p>
-            </div>
-
-            {/* AI Indicator */}
-            {personalizedQuestions.length > 0 && (
-              <div className="mb-4 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-                <Sparkles className="w-4 h-4 text-portfolio-blue animate-pulse" />
-                <p className="text-sm text-gray-700 font-medium">
-                  AI-powered personalized questions based on <span className="font-semibold text-portfolio-blue">"{projectName}"</span>
+                <p className="text-lg text-white/90 mb-4 font-light">
+                  Answer a few strategic questions to get a transparent project estimate
+                </p>
+                <div className="w-full bg-white/20 rounded-full h-3 max-w-md backdrop-blur-sm mt-4">
+                  <div
+                    className="bg-white h-3 rounded-full transition-all duration-300 shadow-lg"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-white/80 mt-3 font-medium">
+                  {currentQuestionIndex + 1} of {questions.length} questions
                 </p>
               </div>
-            )}
-
-            {/* Question Card */}
-            {currentQuestion && (
-          <QuestionCard
-            question={currentQuestion}
-            answer={currentAnswer || null}
-            allAnswers={answers}
-            onAnswer={handleAnswer}
-            questionNumber={currentQuestionIndex + 1}
-            totalQuestions={questions.length}
-            prediction={predictions[currentQuestion.id]}
-            hasPrediction={!!predictions[currentQuestion.id]}
-          />
-            )}
-
-            {/* Navigation */}
-            <div className="flex justify-between items-center mt-6">
-              <button
-                onClick={handlePrevious}
-                disabled={currentQuestionIndex === 0}
-                className="flex items-center px-4 py-2 text-white/80 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                <ArrowLeft className="w-5 h-5 mr-2" />
-                Previous
-              </button>
-
-              {currentQuestionIndex === questions.length - 1 ? (
-                <button
-                  onClick={generateEstimate}
-                  disabled={!allQuestionsAnswered}
-                  className="flex items-center px-8 py-4 bg-white text-portfolio-blue rounded-lg font-semibold text-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-                >
-                  Generate Estimate
-                  <CheckCircle className="w-5 h-5 ml-2" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleNext}
-                  disabled={!currentAnswer}
-                  className="px-8 py-4 bg-white text-portfolio-blue rounded-lg font-semibold text-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-                >
-                  Next
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column (1/3): Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Learning Insights */}
-            <div>
-              <LearningInsights />
             </div>
 
-            {/* Impact Visualization */}
-            <div>
-              <QuestionImpactVisualization
-                impacts={questionImpacts}
-                currentQuestionId={currentQuestion?.id}
-              />
+            {/* Two Column Layout - Question Card and Sidebar */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column (2/3): Main Question Area */}
+              <div className="lg:col-span-2">
+                {/* Question Card */}
+                {currentQuestion && (
+                  <QuestionCard
+                    question={currentQuestion}
+                    answer={currentAnswer || null}
+                    allAnswers={answers}
+                    onAnswer={handleAnswer}
+                    questionNumber={currentQuestionIndex + 1}
+                    totalQuestions={questions.length}
+                    projectName={projectName}
+                    projectSummary={projectContext}
+                    onPrevious={handleQuestionBack}
+                    onNext={
+                      currentQuestionIndex === questions.length - 1
+                        ? generateEstimate
+                        : handleNext
+                    }
+                    canGoBack={true}
+                    isLastQuestion={currentQuestionIndex === questions.length - 1}
+                    canContinue={
+                      currentQuestionIndex === questions.length - 1
+                        ? !!currentAnswer  // On last question, only need current question answered
+                        : !!currentAnswer
+                    }
+                  />
+                )}
+              </div>
+
+              {/* Right Column (1/3): Sidebar */}
+              <div className="lg:col-span-1 space-y-6">
+                {/* Learning Insights */}
+                <div>
+                  <LearningInsights />
+                </div>
+
+                {/* Impact Visualization */}
+                <div>
+                  <QuestionImpactVisualization
+                    impacts={questionImpacts}
+                    currentQuestionId={currentQuestion?.id}
+                    projectName={projectName}
+                    projectContext={projectContext}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Reset Confirmation Modal */}
+        {showResetModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 shadow-2xl max-w-md w-full">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Start New Proposal?</h3>
+                </div>
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <p className="text-gray-700 mb-6 leading-relaxed">
+                Starting a new proposal will delete any work done on the current. Start over?
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetToStart}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                >
+                  Start Over
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+
+  // Default fallback - should never reach here, but ensures something renders
+  return (
+    <div className="min-h-screen portfolio-bg py-12 px-4 flex items-center justify-center">
+      <div className="text-white text-center">
+        <h2 className="text-2xl font-bold mb-4">Loading...</h2>
+        <p className="text-white/70">Please wait while we prepare your proposal builder.</p>
       </div>
     </div>
   );

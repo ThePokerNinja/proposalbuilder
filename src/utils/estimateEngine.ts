@@ -1,9 +1,13 @@
-import { Answer, Task, Estimate, Question } from '../types';
-import { QUESTIONS } from '../config/questions';
-import { getLearningData } from './learningEngine';
+import { Answer, Task, Estimate } from '../types';
+import { generateContextualTasks } from './taskGenerator';
 
-export function calculateEstimate(answers: Answer[]): Task[] {
-  const learningData = getLearningData();
+export function calculateEstimate(answers: Answer[], projectName?: string, projectSummary?: string): Task[] {
+  // Use contextual task generation if project context is available (projectName is enough)
+  if (projectName) {
+    return generateContextualTasks(projectName, projectSummary || '', answers);
+  }
+  
+  // Fallback to default tasks if no context (for backward compatibility)
   const tasks: Task[] = [
     { id: 'discovery', name: 'Discovery & Strategy', baseHours: 8, multiplier: 1, category: 'Planning' },
     { id: 'research', name: 'Research & Analysis', baseHours: 12, multiplier: 1, category: 'Planning' },
@@ -18,7 +22,6 @@ export function calculateEstimate(answers: Answer[]): Task[] {
 
   // Apply multipliers based on answers (supports both old and new question IDs)
   answers.forEach((answer) => {
-    const question = QUESTIONS.find((q) => q.id === answer.questionId);
     const value = Array.isArray(answer.value) ? answer.value : [answer.value];
     const stringValue = typeof answer.value === 'string' ? answer.value : Array.isArray(answer.value) ? answer.value.join(' ') : String(answer.value);
 
@@ -156,16 +159,25 @@ export function calculateTimeline(totalHours: number, timelinePreference?: strin
   let weeks: number;
 
   // Base calculation: assume 40 hours/week capacity
-  const baseWeeks = Math.ceil(totalHours / 40);
+  // Always calculate based on actual hours - no artificial minimums
+  const baseWeeks = totalHours / 40; // Use decimal for accuracy
 
-  if (timelinePreference?.includes('Rush')) {
-    weeks = Math.max(2, Math.ceil(baseWeeks * 0.6));
-  } else if (timelinePreference?.includes('Standard')) {
-    weeks = Math.max(4, Math.ceil(baseWeeks * 1.0));
-  } else if (timelinePreference?.includes('Flexible')) {
-    weeks = Math.max(8, Math.ceil(baseWeeks * 1.5));
+  // Normalize timeline preference string for matching
+  const prefLower = timelinePreference?.toLowerCase() || '';
+
+  if (prefLower.includes('time-sensitive') || prefLower.includes('rush') || prefLower.includes('2-4 weeks')) {
+    // Rush: compress timeline, may require more parallel work
+    weeks = Math.max(1, Math.ceil(baseWeeks * 0.7)); // 30% faster, minimum 1 week
+  } else if (prefLower.includes('strategic') || prefLower.includes('3-6 months') || prefLower.includes('flexible') || prefLower.includes('long-term')) {
+    // Strategic/Flexible: allow more time for quality
+    weeks = Math.max(1, Math.ceil(baseWeeks * 1.3)); // 30% more time, minimum 1 week (not 2)
+  } else if (prefLower.includes('standard') || prefLower.includes('1-3 months') || prefLower.includes('balanced')) {
+    // Standard: normal pace
+    weeks = Math.max(1, Math.ceil(baseWeeks * 1.0)); // Normal pace, minimum 1 week
   } else {
-    weeks = Math.max(4, baseWeeks);
+    // Default: calculate directly from hours with no artificial minimum
+    // Round up to nearest week, but allow fractional weeks for very small projects
+    weeks = Math.max(1, Math.ceil(baseWeeks)); // Minimum 1 week for any project
   }
 
   const endDate = new Date(startDate);
@@ -174,12 +186,13 @@ export function calculateTimeline(totalHours: number, timelinePreference?: strin
   return { weeks, startDate, endDate };
 }
 
-export function createEstimate(answers: Answer[]): Estimate {
-  const tasks = calculateEstimate(answers);
+export function createEstimate(answers: Answer[], projectName?: string, projectSummary?: string): Estimate {
+  const tasks = calculateEstimate(answers, projectName, projectSummary);
   const totalHours = tasks.reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
   
-  const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference');
-  const timeline = calculateTimeline(totalHours, timelineAnswer?.value as string);
+  const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
+  const timelineValue = timelineAnswer?.value as string | undefined;
+  const timeline = calculateTimeline(totalHours, timelineValue);
 
   return {
     tasks,

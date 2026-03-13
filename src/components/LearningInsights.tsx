@@ -1,4 +1,3 @@
-import React from 'react';
 import { getLearningData } from '../utils/learningEngine';
 import { TrendingUp, Database } from 'lucide-react';
 

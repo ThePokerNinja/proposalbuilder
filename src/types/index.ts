@@ -36,3 +36,13 @@ export interface ProjectContext {
   answers: Answer[];
   estimate: Estimate | null;
 }
+
+export interface CalendarEvent {
+  id: string;
+  name: string;
+  date: Date;
+  type: 'meeting' | 'review' | 'milestone';
+  notes?: string;
+  googleCalendarId?: string; // ID from Google Calendar if synced
+  isCustom?: boolean; // Whether this is a user-added event
+}
