@@ -749,7 +749,7 @@ export function EstimateVisualization({
 
   return (
     <div className="min-h-screen portfolio-bg py-12 px-4">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="portfolio-card p-4 md:p-6">
           {/* Header - Compact */}
           <div className="mb-6">

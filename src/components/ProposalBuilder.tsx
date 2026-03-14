@@ -17,6 +17,7 @@ import {
 import { runMarketResearch, MarketResearchResult } from '../utils/marketResearch';
 import { generatePersonalizedQuestions } from '../utils/questionGenerator';
 import { VoiceInput } from './VoiceInput';
+import { ProgressiveCard } from './ProgressiveCard';
 import { ArrowLeft, ArrowRight, Sparkles, X, AlertTriangle } from 'lucide-react';
 
 const TAGLINE_MESSAGES = [
@@ -28,8 +29,8 @@ export function ProposalBuilder() {
   const [projectName, setProjectName] = useState('');
   const [projectContext, setProjectContext] = useState('');
   const [jobTitle, setJobTitle] = useState('');
-  const [projectCategory, setProjectCategory] = useState('branding package');
-  const [projectPriority, setProjectPriority] = useState<'urgent' | 'within-month' | 'no-rush'>('within-month');
+  const [projectCategory, setProjectCategory] = useState('');
+  const [projectPriority, setProjectPriority] = useState<'urgent' | 'within-month' | 'no-rush' | ''>('');
   const [showSummaryField, setShowSummaryField] = useState(false);
   // Flow: 'intro' -> 'research' -> 'questions' (estimate handled separately)
   const [flowStep, setFlowStep] = useState<'intro' | 'research' | 'questions'>('intro');
@@ -42,16 +43,27 @@ export function ProposalBuilder() {
   const [personalizedQuestions, setPersonalizedQuestions] = useState<Question[]>([]);
   const [showResetModal, setShowResetModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // Kept for revert - suppress unused warnings
+  void projectAnalysis;
+  void predictions;
+  void isAnalyzing;
   const [marketResearch, setMarketResearch] = useState<MarketResearchResult | null>(null);
   const analysisTimeoutRef = useRef<number | null>(null);
   const [taglineMessageIndex, setTaglineMessageIndex] = useState(0);
   const [typedTagline, setTypedTagline] = useState('');
+  const [agentTranscript, setAgentTranscript] = useState('');
+  const [agentTranscriptHistory, setAgentTranscriptHistory] = useState<string[]>([]);
 
   // Generate personalized questions when project name/summary is available
   // Update questions dynamically as answers come in to filter irrelevant ones
   useEffect(() => {
-    if (projectName.trim() || projectContext.trim()) {
+    if (projectName.trim() && projectContext.trim()) {
+      // Generate questions once we have both name and summary
       const questions = generatePersonalizedQuestions(projectName, projectContext, answers);
+      setPersonalizedQuestions(questions);
+    } else if (projectName.trim() && !projectContext.trim()) {
+      // If only name is filled, generate basic questions
+      const questions = generatePersonalizedQuestions(projectName, '', answers);
       setPersonalizedQuestions(questions);
     }
   }, [projectName, projectContext, answers]);
@@ -62,20 +74,69 @@ export function ProposalBuilder() {
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.id);
   const learningData = useMemo(() => getLearningData(), []);
 
+  // High-level context we can stream to the voice agent so it always knows
+  // where the user is in the flow and what the current proposal looks like.
+  const agentContext = {
+    flowStep,
+    pageTitle:
+      flowStep === 'intro'
+        ? 'Project Overview'
+        : flowStep === 'research'
+        ? 'Market Research'
+        : flowStep === 'questions'
+        ? 'Discovery Questions'
+        : 'Proposal Builder',
+    projectName,
+    projectSummary: projectContext,
+    jobTitle,
+    projectCategory,
+    projectPriority,
+    questions: {
+      total: questions.length,
+      currentIndex: currentQuestionIndex + 1,
+      currentId: currentQuestion?.id ?? null,
+      currentText: currentQuestion?.text ?? null,
+    },
+    answersSummary: answers.map((a) => ({
+      id: a.questionId,
+      value: a.value,
+    })),
+    estimateSummary: estimate
+      ? {
+          totalHours: estimate.totalHours,
+          timelineWeeks: estimate.timeline.weeks,
+        }
+      : null,
+    showEstimate,
+  };
+
   // Sticky top bar with voice agent + animated tagline
   const TopBar = () => (
     <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-auto">
-      <div className="max-w-5xl mx-auto flex flex-col items-center gap-3">
+      <div className="max-w-5xl mx-auto flex flex-col items-center gap-1.5">
         <VoiceInput
           onFormDataUpdate={handleVoiceFormDataUpdate}
+          onTranscript={(text) => {
+            const clean = text.trim();
+            console.log('Agent transcript for tagline:', clean);
+            // Limit length so it fits nicely in the pill
+            const truncated = clean.length > 140 ? `${clean.slice(0, 137)}...` : clean;
+            setAgentTranscript(truncated);
+
+            // Append to transcript history for real-time view
+            if (clean) {
+              setAgentTranscriptHistory((prev) => [...prev, clean]);
+            }
+          }}
+          agentContext={agentContext}
           onError={(error) => {
             console.error('Voice input error:', error);
           }}
         />
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide min-w-[260px] justify-center">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide min-w-[260px] justify-center -mt-[50px]">
           <Sparkles className="w-3 h-3 text-[#FFD700]" />
           <span className="whitespace-nowrap">
-            {typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
+            {agentTranscript || typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
           </span>
         </span>
       </div>
@@ -158,6 +219,7 @@ export function ProposalBuilder() {
     // No auto-advance - user must click "Next" button to proceed
   };
 
+  // Kept for revert
   const handleStartQuestions = () => {
     if (!projectName.trim()) {
       alert('Please enter a project name');
@@ -196,6 +258,7 @@ export function ProposalBuilder() {
       // Don't block the flow on errors
     }
   };
+  void handleStartQuestions; // Kept for revert
 
   const handleNext = () => {
     if (currentQuestionIndex < questions.length - 1) {
@@ -212,9 +275,15 @@ export function ProposalBuilder() {
   };
 
   const generateEstimate = () => {
+    // Generate personalized questions if not already generated
+    if (personalizedQuestions.length === 0 && projectName.trim()) {
+      const questions = generatePersonalizedQuestions(projectName, projectContext, answers);
+      setPersonalizedQuestions(questions);
+    }
+    
     const newEstimate = createEstimate(answers, projectName, projectContext);
     setEstimate(newEstimate);
-    setShowEstimate(true);
+    // Don't set showEstimate - we'll render inline instead
     
     // Learn from this project to improve future predictions
     if (projectName.trim()) {
@@ -226,6 +295,8 @@ export function ProposalBuilder() {
       );
       saveLearningData(updatedLearning);
     }
+    
+    return newEstimate;
   };
 
   const handleTaskMultiplierChange = (taskId: string, multiplier: number) => {
@@ -265,7 +336,7 @@ export function ProposalBuilder() {
     }
   };
 
-  // Check if form is complete (all required fields filled)
+  // Check if form is complete (all required fields filled) - kept for revert
   const isFormComplete = useMemo(() => {
     return !!(
       jobTitle.trim() &&
@@ -275,6 +346,7 @@ export function ProposalBuilder() {
       projectContext.trim()
     );
   }, [jobTitle, projectCategory, projectPriority, projectName, projectContext]);
+  void isFormComplete; // Kept for revert
 
   // Handle voice input form data updates
   const handleVoiceFormDataUpdate = (data: {
@@ -308,10 +380,6 @@ export function ProposalBuilder() {
     setShowResetModal(false);
   };
 
-  const handleLogoClick = () => {
-    // Always show modal - user can start over at any time
-    setShowResetModal(true);
-  };
 
   const progress = flowStep === 'questions' 
     ? ((currentQuestionIndex + 1) / questions.length) * 100 
@@ -409,11 +477,76 @@ export function ProposalBuilder() {
     return () => window.clearTimeout(pauseId);
   }, [typedTagline, taglineMessageIndex]);
 
+  // Estimate/Dashboard screen (after questions are answered) - check FIRST before other flow steps
+  if (showEstimate && estimate) {
+    return (
+      <div className="min-h-screen portfolio-bg pb-12 px-4">
+        <TopBar />
+        <div className="max-w-6xl mx-auto pt-10">
+          {/* Top actions row: Back, Start over, Export */}
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={handleBackToQuestions}
+              className="flex items-center text-white/90 hover:text-white transition-colors font-medium"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Questions
+            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setFlowStep('intro');
+                  setCurrentQuestionIndex(0);
+                  setAnswers([]);
+                  setEstimate(null);
+                  setShowEstimate(false);
+                  setProjectAnalysis(null);
+                  setPredictions({});
+                  setPersonalizedQuestions([]);
+                }}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium transition-colors"
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
+          <EstimateVisualization
+            tasks={estimate.tasks}
+            timeline={estimate.timeline}
+            totalHours={estimate.totalHours}
+            onTaskMultiplierChange={handleTaskMultiplierChange}
+            onTasksChange={(updatedTasks) => {
+              // Update estimate with new task selections
+              const newTotalHours = updatedTasks
+                .filter((t) => t.selected !== false)
+                .reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
+              
+              // Recalculate timeline based on new total hours
+              const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
+              const timelineWeeks = calculateTimeline(newTotalHours, timelineAnswer?.value as string | undefined);
+              
+              setEstimate({
+                ...estimate,
+                tasks: updatedTasks,
+                totalHours: newTotalHours,
+                timeline: timelineWeeks,
+              });
+            }}
+            projectName={projectName}
+            projectSummary={projectContext}
+            answers={answers}
+            marketResearch={marketResearch}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Toggle tagline text every 4 seconds
   // Project setup screen (Step 1)
   if (flowStep === 'intro') {
     return (
-      <div className="min-h-screen portfolio-bg pb-12 px-4 relative overflow-hidden">
+      <div className="min-h-screen portfolio-bg pb-24 px-4 relative overflow-hidden">
         <TopBar />
 
         {/* Animated background elements */}
@@ -422,55 +555,79 @@ export function ProposalBuilder() {
           <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
         </div>
         
-        <div className="max-w-3xl mx-auto relative z-10 mt-10">
-          {/* Hero Section with gradient text */}
-          <div className="text-center mb-16 animate-slide-up">
-            <h1 className="text-6xl md:text-7xl lg:text-8xl font-extrabold mb-6 tracking-tight">
-              <span className="bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent animate-gradient">
-                Proposal Builder
-              </span>
-            </h1>
-            <p className="text-2xl md:text-3xl text-white/95 font-light mb-2 max-w-2xl mx-auto leading-relaxed">
-              Transform your vision into a
-            </p>
-            <p className="text-2xl md:text-3xl text-[#FFD700] font-semibold mb-8 max-w-2xl mx-auto">
-              transparent, strategic project estimate
-            </p>
-            <div className="flex items-center justify-center gap-2 text-white/70 text-sm">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span>Real-time estimates • Industry-standard rates • AI-powered insights</span>
-            </div>
-          </div>
+        <div className="flex items-center justify-center gap-2 text-white/70 text-sm" style={{ height: '40px' }}>
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <span>Real-time estimates • Industry-standard rates • AI-powered insights</span>
+        </div>
+        
+        <div className="max-w-3xl mx-auto relative z-10 mt-6">
+          {/* NEW PROGRESSIVE CARD - Replaces old multi-step flow */}
+          <ProgressiveCard
+            jobTitle={jobTitle}
+            projectCategory={projectCategory}
+            projectPriority={projectPriority}
+            projectName={projectName}
+            projectContext={projectContext}
+            setJobTitle={setJobTitle}
+            setProjectCategory={setProjectCategory}
+            setProjectPriority={setProjectPriority}
+            setProjectName={setProjectName}
+            setProjectContext={setProjectContext}
+            questions={questions}
+            answers={answers}
+            setAnswers={setAnswers}
+            marketResearch={marketResearch}
+            estimate={estimate}
+            setEstimate={setEstimate}
+            onTaskMultiplierChange={handleTaskMultiplierChange}
+            onRunResearch={() => {
+              // Trigger research when moving from last basic field to research step
+              if (projectName.trim()) {
+                const priorityLabel = projectPriority === 'urgent' ? 'Urgent' : 
+                                     projectPriority === 'within-month' ? 'Within the month' : 
+                                     projectPriority === 'no-rush' ? 'No rush' : '';
+                const result = runMarketResearch(projectName, projectContext, projectCategory, priorityLabel, jobTitle);
+                setMarketResearch(result);
+                
+                // Generate personalized questions after research
+                const questions = generatePersonalizedQuestions(projectName, projectContext);
+                setPersonalizedQuestions(questions);
+              }
+            }}
+            onGenerateEstimate={generateEstimate}
+            onVoiceUpdate={handleVoiceFormDataUpdate}
+          />
 
-          {/* Enhanced Card with gradient border */}
+
+          {/* OLD CARD CODE - PRESERVED FOR REVERT
           <div className="relative group">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
-            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl p-10 md:p-12 space-y-10 shadow-2xl border border-white/20">
-            {/* Top row: job title / project category / priority */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Job title */}
+            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-4 py-4 md:px-5 md:py-4 space-y-4 shadow-2xl border border-white/20">
+            Top row: job title / project category / priority
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              Job title
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Job title
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  What do you do?
                 </label>
                 <input
                   type="text"
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
                   placeholder="e.g., Senior Producer, Marketing Lead"
-                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white placeholder:text-gray-400"
+                  className="w-full px-2.5 py-1.5 text-xs md:text-[13px] border border-gray-200 rounded-lg focus:ring-1.5 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white placeholder:text-gray-400"
                 />
               </div>
 
-              {/* Project category */}
+              Project category
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Project category
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  What do you want to build?
                 </label>
                 <select
                   value={projectCategory}
                   onChange={(e) => setProjectCategory(e.target.value)}
-                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
+                  className="w-full px-2.5 py-1.5 text-xs md:text-[13px] border border-gray-200 rounded-lg focus:ring-1.5 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
                 >
                   <option value="branding package">Branding package</option>
                   <option value="social media">Social media</option>
@@ -482,10 +639,10 @@ export function ProposalBuilder() {
                 </select>
               </div>
 
-              {/* Priority */}
+              Priority
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Priority
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  How soon do you want it done?
                 </label>
                 <select
                   value={projectPriority}
@@ -494,7 +651,7 @@ export function ProposalBuilder() {
                       e.target.value as 'urgent' | 'within-month' | 'no-rush'
                     )
                   }
-                  className="w-full px-4 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
+                  className="w-full px-2.5 py-1.5 text-xs md:text-[13px] border border-gray-200 rounded-lg focus:ring-1.5 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50 hover:bg-white text-gray-800"
                 >
                   <option value="urgent">Urgent</option>
                   <option value="within-month">Within the month</option>
@@ -503,10 +660,12 @@ export function ProposalBuilder() {
               </div>
             </div>
 
-            {/* Project Name */}
+            Project Name
             <div className="transition-all duration-500 ease-out transform opacity-100 translate-y-0">
-              <label htmlFor="project-name" className="block text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 bg-gradient-to-r from-[#FFD700] to-blue-500 rounded-full"></span>
+              <label
+                htmlFor="project-name"
+                className="block text-sm font-semibold text-gray-900 mb-1.5"
+              >
                 Project Name <span className="text-red-500 text-lg">*</span>
               </label>
               <input
@@ -515,11 +674,11 @@ export function ProposalBuilder() {
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 placeholder="e.g., E-commerce Website Redesign"
-                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white font-medium placeholder:text-gray-400"
+                className="w-full px-3.5 py-2.5 text-[15px] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 hover:bg-white font-medium placeholder:text-gray-400"
               />
             </div>
 
-            {/* Project Summary – animates in after name */}
+            Project Summary – animates in after name
             <div
               className={`transition-all duration-500 ease-out transform origin-top ${
                 showSummaryField
@@ -527,9 +686,12 @@ export function ProposalBuilder() {
                   : 'opacity-0 -translate-y-2 max-h-0 overflow-hidden pointer-events-none'
               }`}
             >
-              <label htmlFor="project-context" className="block text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></span>
-                Project Summary <span className="text-gray-400 text-sm font-normal">(Optional)</span>
+              <label
+                htmlFor="project-context"
+                className="block text-sm font-semibold text-gray-900 mb-3"
+              >
+                Project Summary{' '}
+                <span className="text-gray-400 text-sm font-normal">(Optional)</span>
                 {projectAnalysis && (
                   <button
                     type="button"
@@ -647,6 +809,28 @@ export function ProposalBuilder() {
             </button>
             </div>
           </div>
+          */}
+
+          {/* Real-time agent transcript feed */}
+          {agentTranscriptHistory.length > 0 && (
+            <div className="mt-6 bg-black/40 border border-white/10 rounded-2xl p-4 text-xs text-white/80 max-h-56 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold tracking-wide text-[11px] uppercase text-white/60">
+                  Agent transcript
+                </span>
+                <span className="text-[10px] text-white/40">
+                  Live view of what the agent is saying
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {agentTranscriptHistory.map((line, idx) => (
+                  <p key={`${idx}-${line.slice(0, 8)}`} className="leading-snug">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
