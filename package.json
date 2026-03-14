@@ -9,6 +9,8 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "start": "node server-production.js",
+    "start:prod": "npm run build && node server-production.js",
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {

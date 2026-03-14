@@ -54,7 +54,7 @@ export function generatePersonalizedQuestions(
   const audienceOptions = generateAudienceOptions(analysis, combinedText);
   const audienceQuestion: Question = {
     id: 'target-audience',
-    text: `Who is the primary audience for "${projectName}"? Understanding your ideal user helps us design experiences that drive real business results.`,
+    text: 'Who is your primary audience?',
     type: 'select',
     options: audienceOptions,
     category: 'audience',

@@ -11,7 +11,7 @@ export function AudioWaveform({ audioTrack, isActive, color = '#3b82f6' }: Audio
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const [volume, setVolume] = useState(0);
+  const [, setVolume] = useState(0);
 
   useEffect(() => {
     if (!audioTrack || !canvasRef.current) {

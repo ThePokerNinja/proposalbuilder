@@ -12,6 +12,31 @@ interface VoiceInputProps {
   }) => void;
   onTranscript?: (text: string) => void;
   onError?: (error: Error) => void;
+  // High-level UI + proposal context so the agent can act as a senior guide
+  agentContext?: {
+    flowStep: 'intro' | 'research' | 'questions';
+    pageTitle: string;
+    projectName: string;
+    projectSummary: string;
+    jobTitle: string;
+    projectCategory: string;
+    projectPriority: 'urgent' | 'within-month' | 'no-rush' | '';
+    questions: {
+      total: number;
+      currentIndex: number;
+      currentId: string | null;
+      currentText: string | null;
+    };
+    answersSummary: {
+      id: string;
+      value: string | string[] | number | boolean;
+    }[];
+    estimateSummary: {
+      totalHours: number;
+      timelineWeeks: number;
+    } | null;
+    showEstimate: boolean;
+  };
 }
 
 interface FormDataMessage {
@@ -33,12 +58,12 @@ interface TranscriptMessage {
 
 type AgentMessage = FormDataMessage | TranscriptMessage;
 
-export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInputProps) {
+export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentContext }: VoiceInputProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [transcript, setTranscript] = useState('');
+  const [, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
@@ -46,7 +71,40 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const [agentAudioTrack, setAgentAudioTrack] = useState<RemoteAudioTrack | null>(null);
   const [agentEnergy] = useState(0);
-  const [lastAgentActivity, setLastAgentActivity] = useState<number | null>(null);
+  const [isAgentActive, setIsAgentActive] = useState(false);
+  const agentActivityTimeoutRef = useRef<number | null>(null);
+
+  // Mark the agent as visually active for a short window; refreshed on each event
+  const markAgentActive = () => {
+    setIsAgentActive(true);
+    if (agentActivityTimeoutRef.current !== null) {
+      window.clearTimeout(agentActivityTimeoutRef.current);
+    }
+    agentActivityTimeoutRef.current = window.setTimeout(() => {
+      setIsAgentActive(false);
+      agentActivityTimeoutRef.current = null;
+    }, 1500);
+  };
+
+  // Helper: send structured UI/proposal context to the agent so it always
+  // knows where the user is and what they are looking at.
+  const sendAgentContext = (context: VoiceInputProps['agentContext']) => {
+    if (!roomRef.current || !context) return;
+
+    try {
+      const payload = {
+        type: 'ui_context',
+        context,
+      };
+      const encoded = new TextEncoder().encode(JSON.stringify(payload));
+      // Default is reliable delivery; no need to pass kind explicitly
+      roomRef.current.localParticipant.publishData(encoded).catch((err) => {
+        console.error('Failed to publish context to agent:', err);
+      });
+    } catch (err) {
+      console.error('Error serializing context for agent:', err);
+    }
+  };
 
   // Connect to LiveKit room
   const connectToRoom = async () => {
@@ -91,26 +149,65 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
 
       roomRef.current = room;
 
-      // Listen for data messages from agent
+      // As soon as we have a room, send initial context so the agent
+      // understands what page/step the user is on.
+      if (agentContext) {
+        sendAgentContext(agentContext);
+      }
+
+      // Listen for data messages from agent (transcripts + structured form data)
       room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
+        const raw = new TextDecoder().decode(payload);
+
         try {
-          const message: AgentMessage = JSON.parse(new TextDecoder().decode(payload));
-          
-          if (message.type === 'transcript') {
-            setTranscript(message.text);
-            setLastAgentActivity(Date.now());
-            if (onTranscript) {
-              onTranscript(message.text);
-            }
-          } else if (message.type === 'form_data') {
-            onFormDataUpdate(message.data);
-            // Clear transcript after form is updated
-            if (message.data.projectName || message.data.projectSummary) {
+          const parsed = JSON.parse(raw) as AgentMessage | Record<string, unknown>;
+
+          // Handle structured form data from agent
+          if ((parsed as AgentMessage).type === 'form_data') {
+            const msg = parsed as FormDataMessage;
+            onFormDataUpdate(msg.data);
+            if (msg.data.projectName || msg.data.projectSummary) {
               setTranscript('');
             }
+            return;
           }
-        } catch (err) {
-          console.error('Error parsing agent message:', err);
+
+          // Handle explicit transcript messages
+          if ((parsed as AgentMessage).type === 'transcript') {
+            const msg = parsed as TranscriptMessage;
+            setTranscript(msg.text);
+            markAgentActive();
+            if (onTranscript) {
+              onTranscript(msg.text);
+            }
+            return;
+          }
+
+          // Fallback: try to extract any reasonable text field from arbitrary payloads
+          const anyMsg = parsed as Record<string, unknown>;
+          const candidateText =
+            (typeof anyMsg.text === 'string' && anyMsg.text) ||
+            (typeof anyMsg.message === 'string' && anyMsg.message) ||
+            (typeof anyMsg.content === 'string' && anyMsg.content);
+
+          if (candidateText) {
+            setTranscript(candidateText);
+            markAgentActive();
+            if (onTranscript) {
+              onTranscript(candidateText);
+            }
+            return;
+          }
+        } catch {
+          // Not JSON – treat raw string as transcript
+          const text = raw.trim();
+          if (text) {
+            setTranscript(text);
+            markAgentActive();
+            if (onTranscript) {
+              onTranscript(text);
+            }
+          }
         }
       });
 
@@ -130,9 +227,11 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
 
         if (track.kind === Track.Kind.Audio && track instanceof RemoteAudioTrack) {
           // Store the track
-          remoteAudioTracksRef.current.set(track.sid, track);
+          if (track.sid) {
+            remoteAudioTracksRef.current.set(track.sid, track);
+          }
           setAgentAudioTrack(track); // Update state for waveform
-          setLastAgentActivity(Date.now());
+          markAgentActive();
           
           // Create or get audio element
           if (!audioElementRef.current) {
@@ -150,7 +249,9 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
       room.on(RoomEvent.TrackUnsubscribed, (track: Track) => {
         if (track.kind === Track.Kind.Audio) {
           track.detach();
-          remoteAudioTracksRef.current.delete(track.sid);
+          if (track.sid) {
+            remoteAudioTracksRef.current.delete(track.sid);
+          }
           setAgentAudioTrack(null);
           console.log('Agent audio track unsubscribed');
         }
@@ -173,6 +274,14 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
       }
     }
   };
+
+  // Whenever high-level UI/proposal context changes while connected,
+  // push an updated snapshot to the agent so it can guide the user.
+  useEffect(() => {
+    if (!isConnected || !agentContext) return;
+    sendAgentContext(agentContext);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, JSON.stringify(agentContext)]);
 
   // Start listening (enable microphone)
   const startListening = async () => {
@@ -205,7 +314,7 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
     }
   };
 
-  // Stop listening
+  // Stop listening (kept for potential future use)
   const stopListening = async () => {
     if (localAudioTrackRef.current && roomRef.current) {
       localAudioTrackRef.current.stop();
@@ -215,7 +324,7 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
     }
   };
 
-  // Disconnect from room
+  // Disconnect from room (kept for potential future use)
   const disconnect = async () => {
     console.log('Disconnect called, current state:', { isConnected, isListening, roomExists: !!roomRef.current });
     
@@ -300,6 +409,11 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
         }
         audioElementRef.current = null;
       }
+
+      // Clear any pending agent activity timeout
+      if (agentActivityTimeoutRef.current !== null) {
+        window.clearTimeout(agentActivityTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -343,19 +457,15 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
     );
   }
 
-  // Agent is considered "active" when we've seen agent activity recently
-  // (audio track subscribed or transcript messages), so the glow doesn't blink.
-  const AGENT_ACTIVE_WINDOW_MS = 4000;
-  const now = Date.now();
-  const isAgentActive =
-    isConnected && lastAgentActivity !== null && now - lastAgentActivity < AGENT_ACTIVE_WINDOW_MS;
-  
   // Determine agent state: speaking (has audio track) vs listening (connected but not speaking)
   const isAgentSpeaking = isConnected && agentAudioTrack !== null;
-  const isAgentListening = isConnected && !isAgentSpeaking;
   
   // Keep a subtle scale effect when connected.
   const popScale = isConnected ? 1 + agentEnergy * 0.4 : 1;
+
+  // Mark functions as used to avoid TypeScript errors (kept for potential future use)
+  void stopListening;
+  void disconnect;
 
   return (
     <div className="relative z-50 w-full flex justify-center group pointer-events-auto">
@@ -381,21 +491,21 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div
             className={`relative w-40 h-40 rounded-full overflow-hidden ${
-              isConnected
+              isConnected && isAgentActive
                 ? isAgentSpeaking
-                  ? 'agent-strobe-yellow'
-                  : 'agent-strobe-blue'
+                  ? 'agent-pulse-fast agent-strobe-yellow'
+                  : 'agent-pulse-fast agent-strobe-blue'
                 : ''
             }`}
           >
             <img
               src={`${import.meta.env.BASE_URL}assets/agent-orb.gif`}
               alt="Agent active animation"
-              className="w-full h-full object-cover transform scale-[2.4]"
+              className="w-full h-full object-cover transform scale-[1.5]"
             />
           </div>
 
-          {/* Strobe animations for agent states */}
+          {/* Strobe + pulse animations for agent states */}
           <style>{`
             @keyframes strobeYellow {
               0%, 100% {
@@ -419,14 +529,28 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError }: VoiceInp
             .agent-strobe-blue {
               animation: strobeBlue 0.6s ease-in-out infinite;
             }
+            @keyframes pulseFast {
+              0% {
+                transform: scale(0.9);
+              }
+              50% {
+                transform: scale(1.1);
+              }
+              100% {
+                transform: scale(0.9);
+              }
+            }
+            .agent-pulse-fast {
+              animation: pulseFast 0.25s ease-in-out infinite;
+            }
           `}</style>
         </div>
 
-        {/* Logo centered on top of sphere / black hole */}
+        {/* Logo centered on top of sphere / black hole – no radial ring or white border */}
         <img
           src={`${import.meta.env.BASE_URL}assets/logo.png`}
           alt="Logo"
-          className="relative h-40 w-40 object-contain drop-shadow-xl pointer-events-none"
+          className="relative h-40 w-40 object-contain pointer-events-none"
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
           }}
