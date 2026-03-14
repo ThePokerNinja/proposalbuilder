@@ -68,7 +68,8 @@ export function ProgressiveCard({
   onVoiceUpdate,
 }: ProgressiveCardProps) {
   // Track which step we're on (0-4 = basic fields, 5 = research step, 6+ = discovery questions)
-  const [currentStep, setCurrentStep] = useState(0);
+  // Start with -1 so no step is active by default
+  const [currentStep, setCurrentStep] = useState(-1);
   const [visibleSteps, setVisibleSteps] = useState<Set<number>>(new Set([0]));
   // Track which dropdowns/selects are open
   const [openDropdowns, setOpenDropdowns] = useState<Set<number>>(new Set());
@@ -78,10 +79,32 @@ export function ProgressiveCard({
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
   // Track hovered step (for temporary expansion)
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
-  // Force re-render for button state updates
-  const [forceUpdate, setForceUpdate] = useState(0);
+  // Track focused inputs (for active styling)
+  const [focusedInput, setFocusedInput] = useState<number | null>(null);
+  // Track completion status for button
+  const [allComplete, setAllComplete] = useState(false);
+  // Track timeouts for cleanup
+  const timeoutRefs = useRef<Set<number>>(new Set());
   
   const RESEARCH_STEP_INDEX = 5; // Step index for research (after 5 basic fields)
+  
+  // Helper to create timeout with cleanup tracking
+  const createTimeout = (callback: () => void, delay: number): number => {
+    const id = window.setTimeout(() => {
+      timeoutRefs.current.delete(id);
+      callback();
+    }, delay);
+    timeoutRefs.current.add(id);
+    return id;
+  };
+  
+  // Cleanup all timeouts on unmount
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(id => clearTimeout(id));
+      timeoutRefs.current.clear();
+    };
+  }, []);
   
   // Basic field steps
   const BASIC_STEPS = [
@@ -101,15 +124,21 @@ export function ProgressiveCard({
       // Research step is complete if we have research data
       return marketResearch !== null;
     } else {
-      // Discovery question
-      const questionIndex = stepIndex - BASIC_STEPS.length - 1; // -1 for research step
+      // Discovery question - use RESEARCH_STEP_INDEX for consistency
+      const questionIndex = stepIndex - RESEARCH_STEP_INDEX - 1; // -1 for research step
       const question = questions[questionIndex];
       if (!question) return false;
       const answer = answers.find(a => a.questionId === question.id);
       if (question.type === 'multi-select') {
         return Array.isArray(answer?.value) && answer.value.length > 0;
       }
-      return answer?.value !== undefined && answer.value !== '';
+      // Check for both string and non-empty string values
+      const value = answer?.value;
+      if (value === undefined || value === null) return false;
+      if (typeof value === 'string') {
+        return value.trim() !== '';
+      }
+      return true; // For non-string values (like numbers, booleans), consider them complete if they exist
     }
   };
   
@@ -151,7 +180,7 @@ export function ProgressiveCard({
       }
       
       // Then collapse all other completed steps after a brief delay to ensure state has updated
-      setTimeout(() => {
+      createTimeout(() => {
         const allStepIndices: number[] = [
           ...BASIC_STEPS.map((_, idx) => idx),
           RESEARCH_STEP_INDEX,
@@ -194,7 +223,7 @@ export function ProgressiveCard({
         if (step.type === 'select') {
           setOpenDropdowns(prev => new Set([...prev, stepIndex]));
           // Focus and click the select element after it renders
-          setTimeout(() => {
+          createTimeout(() => {
             const selectEl = selectRefs.current[stepIndex];
             if (selectEl) {
               selectEl.focus();
@@ -209,7 +238,7 @@ export function ProgressiveCard({
         if (question && (question.type === 'select' || question.type === 'multi-select')) {
           setOpenDropdowns(prev => new Set([...prev, stepIndex]));
           // Focus and click the select element after it renders
-          setTimeout(() => {
+          createTimeout(() => {
             const selectEl = selectRefs.current[stepIndex];
             if (selectEl) {
               selectEl.focus();
@@ -290,12 +319,25 @@ export function ProgressiveCard({
     }
   }, [projectCategory, projectPriority, openDropdowns]);
   
-  // Center the active step vertically on the page
+  // Center the active step vertically on the page and focus it for keyboard input
   useEffect(() => {
+    // Don't do anything if no step is active
+    if (currentStep === -1) return;
+    
     const activeStepElement = stepRefs.current[currentStep];
+    const timeoutIds: number[] = [];
+    
     if (activeStepElement) {
-      // Use setTimeout to ensure DOM has updated
-      setTimeout(() => {
+      // Focus the element if it's the research step (so Enter key works)
+      if (currentStep === RESEARCH_STEP_INDEX) {
+        const focusTimeoutId = createTimeout(() => {
+          activeStepElement.focus();
+        }, 50);
+        timeoutIds.push(focusTimeoutId);
+      }
+      
+      // Use tracked timeout to ensure DOM has updated
+      const scrollTimeoutId = createTimeout(() => {
         const elementRect = activeStepElement.getBoundingClientRect();
         const elementCenter = elementRect.top + elementRect.height / 2;
         const viewportCenter = window.innerHeight / 2;
@@ -306,12 +348,13 @@ export function ProgressiveCard({
           behavior: 'smooth'
         });
       }, 100);
+      timeoutIds.push(scrollTimeoutId);
     }
     
     // Ensure active step is never collapsed (but only if it's not complete)
     // Completed steps should stay collapsed even when active (user clicked to edit)
     // Only remove incomplete steps from collapsed when they become active
-    const timeoutId = setTimeout(() => {
+    const collapseTimeoutId = createTimeout(() => {
       setCollapsedSteps(prev => {
         // Only remove from collapsed if step is active AND not complete
         if (prev.has(currentStep) && !isStepComplete(currentStep)) {
@@ -322,55 +365,155 @@ export function ProgressiveCard({
         return prev;
       });
     }, 50);
+    timeoutIds.push(collapseTimeoutId);
     
-    return () => clearTimeout(timeoutId);
+    return () => {
+      timeoutIds.forEach(id => {
+        clearTimeout(id);
+        timeoutRefs.current.delete(id);
+      });
+    };
   }, [currentStep]);
   
-  // Collapse completed steps when they become inactive
-  useEffect(() => {
-    // Get all step indices
-    const allStepIndices: number[] = [
-      ...BASIC_STEPS.map((_, idx) => idx),
-      RESEARCH_STEP_INDEX,
-      ...questions.map((_, idx) => RESEARCH_STEP_INDEX + 1 + idx)
-    ];
-    
-    // For each step, if it's complete and not active, ensure it's collapsed
-    allStepIndices.forEach(stepIndex => {
-      if (isStepComplete(stepIndex) && stepIndex !== currentStep) {
-        setCollapsedSteps(prev => {
-          if (!prev.has(stepIndex)) {
-            return new Set([...prev, stepIndex]);
-          }
-          return prev;
-        });
-      }
-    });
-  }, [currentStep, jobTitle, projectCategory, projectPriority, projectName, projectContext, answers, questions, marketResearch]);
+  // Consolidated collapse logic - single useEffect to prevent loops
+  // Use refs to track previous values and prevent unnecessary updates
+  const prevValuesRef = useRef<{
+    currentStep: number;
+    answersLength: number;
+    questionsLength: number;
+    jobTitle: string;
+    projectCategory: string;
+    projectPriority: string;
+    projectName: string;
+    projectContext: string;
+    marketResearch: MarketResearchResult | null;
+  } | null>(null);
   
-  // Force re-render when answers change to update button state
   useEffect(() => {
-    setForceUpdate(prev => prev + 1);
+    const currentValues = {
+      currentStep,
+      answersLength: answers.length,
+      questionsLength: questions.length,
+      jobTitle,
+      projectCategory,
+      projectPriority,
+      projectName,
+      projectContext,
+      marketResearch,
+    };
     
-    // When all steps become complete, ensure everything is collapsed
-    if (allStepsComplete()) {
+    // Check if anything actually changed
+    const prev = prevValuesRef.current;
+    if (prev) {
+      const hasChanges = 
+        prev.currentStep !== currentStep ||
+        prev.answersLength !== answers.length ||
+        prev.questionsLength !== questions.length ||
+        prev.jobTitle !== jobTitle ||
+        prev.projectCategory !== projectCategory ||
+        prev.projectPriority !== projectPriority ||
+        prev.projectName !== projectName ||
+        prev.projectContext !== projectContext ||
+        prev.marketResearch !== marketResearch;
+      
+      if (!hasChanges) {
+        prevValuesRef.current = currentValues;
+        return; // No changes, skip update
+      }
+    }
+    
+    prevValuesRef.current = currentValues;
+    
+    // Debounce collapse updates to prevent cascading re-renders
+    const timeoutId = createTimeout(() => {
+      // Get all step indices
       const allStepIndices: number[] = [
         ...BASIC_STEPS.map((_, idx) => idx),
         RESEARCH_STEP_INDEX,
         ...questions.map((_, idx) => RESEARCH_STEP_INDEX + 1 + idx)
       ];
       
+      // Batch all collapse updates into a single setState call
       setCollapsedSteps(prev => {
         const newCollapsed = new Set(prev);
+        let hasChanges = false;
+        
         allStepIndices.forEach(stepIndex => {
-          if (isStepComplete(stepIndex)) {
+          const shouldBeCollapsed = isStepComplete(stepIndex) && (currentStep === -1 || stepIndex !== currentStep);
+          if (shouldBeCollapsed && !newCollapsed.has(stepIndex)) {
             newCollapsed.add(stepIndex);
+            hasChanges = true;
+          } else if (!shouldBeCollapsed && newCollapsed.has(stepIndex) && (currentStep === -1 || stepIndex === currentStep)) {
+            // Only remove from collapsed if it's the current step and not complete
+            if (!isStepComplete(stepIndex)) {
+              newCollapsed.delete(stepIndex);
+              hasChanges = true;
+            }
           }
         });
-        return newCollapsed;
+        
+        // Only return new Set if there were changes
+        return hasChanges ? newCollapsed : prev;
       });
-    }
-  }, [answers]);
+      
+      // Update completion status for button
+      const isComplete = allStepsComplete();
+      setAllComplete(isComplete);
+    }, 50); // Small debounce to batch updates
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutRefs.current.delete(timeoutId);
+      }
+    };
+  }, [currentStep, jobTitle, projectCategory, projectPriority, projectName, projectContext, answers, questions, marketResearch]);
+  
+  // Update completion status immediately when answers or other dependencies change
+  useEffect(() => {
+    // Small delay to ensure state has settled
+    const timeoutId = createTimeout(() => {
+      // Check completion by also looking at select elements' current values
+      // This handles cases where onChange hasn't updated state yet
+      let allComplete = true;
+      
+      // Check basic steps
+      const basicComplete = BASIC_STEPS.every((_, i) => isStepComplete(i));
+      if (!basicComplete) allComplete = false;
+      
+      // Check research step
+      const researchComplete = isStepComplete(RESEARCH_STEP_INDEX);
+      if (!researchComplete) allComplete = false;
+      
+      // Check questions - also check select elements directly
+      const questionsComplete = questions.every((q, i) => {
+        const stepIndex = RESEARCH_STEP_INDEX + 1 + i;
+        const answer = answers.find(a => a.questionId === q.id);
+        
+        // For select questions, also check the select element's value directly
+        if (q.type === 'select') {
+          const selectEl = selectRefs.current[stepIndex];
+          if (selectEl && selectEl.value) {
+            return true; // Select has a value
+          }
+        }
+        
+        // Otherwise use normal completion check
+        return isStepComplete(stepIndex);
+      });
+      
+      if (!questionsComplete) allComplete = false;
+      
+      setAllComplete(allComplete);
+    }, 150); // Slightly longer delay to ensure all state updates have propagated
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutRefs.current.delete(timeoutId);
+      }
+    };
+  }, [answers, jobTitle, projectCategory, projectPriority, projectName, projectContext, marketResearch, questions.length, questions]);
   
   // Debounced estimate update - only updates existing estimate, doesn't create new one
   useEffect(() => {
@@ -464,7 +607,8 @@ export function ProgressiveCard({
           return next;
         });
         // Auto-collapse when completed (only if not currently active)
-        setTimeout(() => {
+        // Use tracked timeout for cleanup
+        createTimeout(() => {
           setCollapsedSteps(prev => {
             // Only collapse if this step is not currently active and not already collapsed
             if (currentStep !== stepIndex && !prev.has(stepIndex)) {
@@ -510,44 +654,7 @@ export function ProgressiveCard({
     setVisibleSteps(prev => new Set([...prev, stepIndex]));
   };
   
-  // Auto-collapse completed steps when they're not active
-  useEffect(() => {
-    // Check all basic steps
-    BASIC_STEPS.forEach((_, idx) => {
-      if (isStepComplete(idx) && idx !== currentStep) {
-        setCollapsedSteps(prev => {
-          // Only add if not already collapsed and not active
-          if (!prev.has(idx) && idx !== currentStep) {
-            return new Set([...prev, idx]);
-          }
-          return prev;
-        });
-      }
-    });
-    
-    // Check research step
-    if (isStepComplete(RESEARCH_STEP_INDEX) && RESEARCH_STEP_INDEX !== currentStep) {
-      setCollapsedSteps(prev => {
-        if (!prev.has(RESEARCH_STEP_INDEX) && RESEARCH_STEP_INDEX !== currentStep) {
-          return new Set([...prev, RESEARCH_STEP_INDEX]);
-        }
-        return prev;
-      });
-    }
-    
-    // Check all discovery questions
-    questions.forEach((_, questionIndex) => {
-      const stepIndex = RESEARCH_STEP_INDEX + 1 + questionIndex;
-      if (isStepComplete(stepIndex) && stepIndex !== currentStep) {
-        setCollapsedSteps(prev => {
-          if (!prev.has(stepIndex) && stepIndex !== currentStep) {
-            return new Set([...prev, stepIndex]);
-          }
-          return prev;
-        });
-      }
-    });
-  }, [jobTitle, projectCategory, projectPriority, projectName, projectContext, currentStep, answers, questions, marketResearch]);
+  // REMOVED: Duplicate collapse logic - now handled in consolidated useEffect above
   
   // Toggle question dropdown
   const toggleQuestionDropdown = (questionIndex: number) => {
@@ -578,7 +685,24 @@ export function ProgressiveCard({
   const allStepsComplete = () => {
     const basicComplete = BASIC_STEPS.every((_, i) => isStepComplete(i));
     const researchComplete = isStepComplete(RESEARCH_STEP_INDEX);
-    const questionsComplete = questions.every((_, i) => isStepComplete(RESEARCH_STEP_INDEX + 1 + i));
+    
+    // Check questions - also check select elements directly for immediate feedback
+    const questionsComplete = questions.every((q, i) => {
+      const stepIndex = RESEARCH_STEP_INDEX + 1 + i;
+      
+      // For select questions, also check the select element's value directly
+      // This handles cases where onChange hasn't updated state yet
+      if (q.type === 'select') {
+        const selectEl = selectRefs.current[stepIndex];
+        if (selectEl && selectEl.value && selectEl.value.trim() !== '') {
+          return true; // Select has a value
+        }
+      }
+      
+      // Otherwise use normal completion check
+      return isStepComplete(stepIndex);
+    });
+    
     return basicComplete && researchComplete && questionsComplete;
   };
   
@@ -608,12 +732,13 @@ export function ProgressiveCard({
   
   // Render a basic field step
   const renderBasicField = (stepIndex: number, step: typeof BASIC_STEPS[0]) => {
-    if (!visibleSteps.has(stepIndex)) return null;
+    // First step (index 0) should always be visible, even when currentStep is -1
+    if (!visibleSteps.has(stepIndex) && stepIndex !== 0) return null;
     
     const isActive = currentStep === stepIndex;
     const isComplete = isStepComplete(stepIndex);
     // A step is collapsed if it's in collapsedSteps AND not currently active
-    const isCollapsed = collapsedSteps.has(stepIndex) && !isActive;
+    const isCollapsed = collapsedSteps.has(stepIndex) && (currentStep === -1 || !isActive);
     const isHovered = hoveredStep === stepIndex;
     // Questions 2 and 3 (projectCategory and projectPriority) don't show next button
     const showNextButton = isStepComplete(stepIndex) && step.key !== 'projectCategory' && step.key !== 'projectPriority';
@@ -654,14 +779,14 @@ export function ProgressiveCard({
         ref={(el) => { stepRefs.current[stepIndex] = el; }}
         key={step.key}
         className={`transition-all duration-500 ease-out flex items-center gap-3 min-w-0 w-full ${
-          isActive
+          (isActive || stepIndex === 0 || focusedInput === stepIndex)
             ? 'opacity-100 translate-y-0 scale-100'
             : isComplete
             ? 'opacity-60 translate-y-0 scale-[0.98]'
             : 'opacity-0 -translate-y-4 scale-95 pointer-events-none h-0 overflow-hidden'
         }`}
         style={{
-          animation: isActive && !isComplete ? 'materialFadeIn 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' : undefined,
+          animation: (isActive || stepIndex === 0) && !isComplete ? 'materialFadeIn 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' : undefined,
         }}
         onMouseLeave={() => {
           // Always clear hover state when mouse leaves, which will collapse if it was hovered
@@ -685,12 +810,32 @@ export function ProgressiveCard({
                 }
               }}
               placeholder={step.placeholder}
+              onFocus={() => {
+                setFocusedInput(stepIndex);
+                if (currentStep === -1) {
+                  setCurrentStep(stepIndex);
+                  setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                }
+              }}
+              onBlur={() => {
+                setFocusedInput(null);
+              }}
+              onMouseEnter={() => {
+                if (currentStep === -1 || currentStep === stepIndex) {
+                  setFocusedInput(stepIndex);
+                }
+              }}
+              onMouseLeave={() => {
+                if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`input[data-step-index="${stepIndex}"]`)) {
+                  setFocusedInput(null);
+                }
+              }}
+              data-step-index={stepIndex}
               className={`flex-1 min-w-0 px-4 py-2 text-base border-2 rounded-xl transition-all duration-200 ${
-                isActive
+                (focusedInput === stepIndex || hoveredStep === stepIndex)
                   ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                   : 'border-gray-200 bg-gray-50'
               } focus:outline-none placeholder:text-gray-400`}
-              autoFocus={isActive}
             />
             {showNextButton && (
               <button
@@ -731,13 +876,33 @@ export function ProgressiveCard({
                     }
                   }}
                   onClick={() => handleFieldClick(stepIndex)}
+                  onFocus={() => {
+                    setFocusedInput(stepIndex);
+                    if (currentStep === -1) {
+                      setCurrentStep(stepIndex);
+                      setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                    }
+                  }}
+                  onBlur={() => {
+                    setFocusedInput(null);
+                  }}
+                  onMouseEnter={() => {
+                    if (currentStep === -1 || currentStep === stepIndex) {
+                      setFocusedInput(stepIndex);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`input[data-step-index="${stepIndex}"][list]`)) {
+                      setFocusedInput(null);
+                    }
+                  }}
+                  data-step-index={stepIndex}
                   placeholder={step.placeholder}
                   className={`flex-1 min-w-0 px-4 py-2 text-base border-2 rounded-xl transition-all duration-200 ${
-                    isActive
+                    (focusedInput === stepIndex || hoveredStep === stepIndex)
                       ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                       : 'border-gray-200 bg-gray-50'
                   } focus:outline-none placeholder:text-gray-400`}
-                  autoFocus={isActive}
                 />
                 <datalist id={`category-options-${stepIndex}`}>
                   {step.options?.map(opt => (
@@ -786,15 +951,35 @@ export function ProgressiveCard({
                     }}
                     onChange={() => {}}
                     readOnly
+                    onFocus={() => {
+                      setFocusedInput(stepIndex);
+                      if (currentStep === -1) {
+                        setCurrentStep(stepIndex);
+                        setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                      }
+                    }}
+                    onBlur={() => {
+                      setFocusedInput(null);
+                    }}
+                    onMouseEnter={() => {
+                      if (currentStep === -1 || currentStep === stepIndex) {
+                        setFocusedInput(stepIndex);
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`textarea[data-step-index="${stepIndex}"]`)) {
+                        setFocusedInput(null);
+                      }
+                    }}
+                    data-step-index={stepIndex}
                     placeholder={step.placeholder}
                     className={`flex-1 min-w-0 px-4 py-2 text-base border-2 rounded-xl transition-all duration-200 cursor-pointer resize-none overflow-hidden min-h-[40px] ${
-                      isActive
+                      (focusedInput === stepIndex || hoveredStep === stepIndex)
                         ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                         : 'border-gray-200 bg-gray-50'
                     } focus:outline-none placeholder:text-gray-400 placeholder:break-words`}
                     style={{ height: 'auto' }}
                     rows={1}
-                    autoFocus={isActive && !step.value}
                   />
                 ) : (
                   <select
@@ -805,14 +990,14 @@ export function ProgressiveCard({
                       handleFieldChange(stepIndex, newValue);
                       // Close dropdown after selection and advance to next step
                       if (newValue) {
-                        setTimeout(() => {
+                        createTimeout(() => {
                           setOpenDropdowns(prev => {
                             const next = new Set(prev);
                             next.delete(stepIndex);
                             return next;
                           });
                           // Auto-advance to next step after selection
-                          setTimeout(() => {
+                          createTimeout(() => {
                             handleNext();
                           }, 100);
                         }, 100);
@@ -820,26 +1005,34 @@ export function ProgressiveCard({
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        e.preventDefault();
                         if (isStepComplete(stepIndex)) {
-                          e.preventDefault();
-                          collapseStepImmediately(stepIndex);
+                          // Same behavior as Next button - collapse and advance
+                          collapseStepImmediately(stepIndex, true);
                           handleNext();
                         } else {
                           // Close dropdown if no selection
-                          e.preventDefault();
                           toggleDropdown(stepIndex);
                         }
                       }
                     }}
+                    onFocus={() => {
+                      setFocusedInput(stepIndex);
+                      if (currentStep === -1) {
+                        setCurrentStep(stepIndex);
+                        setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                      }
+                    }}
                     onBlur={() => {
-                      setTimeout(() => toggleDropdown(stepIndex), 200);
+                      setFocusedInput(null);
+                      createTimeout(() => toggleDropdown(stepIndex), 200);
                     }}
                     onClick={(e) => {
                       // Ensure dropdown opens on click
                       e.stopPropagation();
                     }}
                     className={`flex-1 min-w-0 px-4 py-3 text-base border-2 rounded-xl transition-all duration-200 max-w-full ${
-                      isActive
+                      (focusedInput === stepIndex || hoveredStep === stepIndex)
                         ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                         : 'border-gray-200 bg-gray-50'
                     } focus:outline-none`}
@@ -870,6 +1063,26 @@ export function ProgressiveCard({
                 e.target.style.height = `${e.target.scrollHeight}px`;
               }}
               onClick={() => handleFieldClick(stepIndex)}
+              onFocus={() => {
+                setFocusedInput(stepIndex);
+                if (currentStep === -1) {
+                  setCurrentStep(stepIndex);
+                  setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                }
+              }}
+              onBlur={() => {
+                setFocusedInput(null);
+              }}
+              onMouseEnter={() => {
+                if (currentStep === -1 || currentStep === stepIndex) {
+                  setFocusedInput(stepIndex);
+                }
+              }}
+              onMouseLeave={() => {
+                if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`textarea[data-step-index="${stepIndex}"]`)) {
+                  setFocusedInput(null);
+                }
+              }}
               onKeyDown={(e) => {
                 // Enter key advances when complete, Shift+Enter for new line
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -881,13 +1094,13 @@ export function ProgressiveCard({
                 }
               }}
               placeholder={step.placeholder}
+              data-step-index={stepIndex}
               rows={1}
                 className={`flex-1 min-w-0 px-4 py-2 text-base border-2 rounded-xl transition-all duration-200 resize-none overflow-hidden min-h-[40px] max-h-[200px] ${
-                isActive
+                (focusedInput === stepIndex || hoveredStep === stepIndex)
                   ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                   : 'border-gray-200 bg-gray-50'
               } focus:outline-none placeholder:text-gray-400`}
-              autoFocus={isActive}
               style={{ height: 'auto' }}
             />
             {showNextButton && (
@@ -915,7 +1128,6 @@ export function ProgressiveCard({
     const isActive = currentStep === RESEARCH_STEP_INDEX;
     const isComplete = isStepComplete(RESEARCH_STEP_INDEX);
     const isCollapsed = collapsedSteps.has(RESEARCH_STEP_INDEX) && !isActive;
-    const isHovered = hoveredStep === RESEARCH_STEP_INDEX;
     const displayResearch = marketResearch || {
       marketSummary: 'Preparing market analysis...',
       competitiveLandscape: 'Evaluating competitive landscape...',
@@ -929,8 +1141,8 @@ export function ProgressiveCard({
       },
     };
     
-    // Collapsed view
-    if (isCollapsed && !isHovered && !isActive) {
+    // Collapsed view - show KPI by default
+    if (isCollapsed && !isActive) {
       return (
         <div
           ref={(el) => { stepRefs.current[RESEARCH_STEP_INDEX] = el; }}
@@ -944,21 +1156,46 @@ export function ProgressiveCard({
             handleResetStep(RESEARCH_STEP_INDEX);
           }}
         >
-          <div className="px-4 py-2 text-sm border-2 border-gray-200 rounded-xl bg-gray-50/50 hover:bg-gray-100 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-medium">Step 2 · Strategic Market Review:</span>
-              <span className="text-gray-700 font-medium truncate ml-2">Market analysis complete</span>
+          {/* Show KPI as default collapsed state */}
+          {displayResearch.kpi && (
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">KPI</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-sm font-bold text-gray-900">Predicted Success Metric</h4>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded-full">
+                      KPI 1
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 mb-1">
+                    {displayResearch.kpi.name}
+                  </p>
+                  <p className="text-xs text-gray-600 mb-2">
+                    {displayResearch.kpi.description}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500">Target:</span>
+                    <span className="text-sm font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">
+                      {displayResearch.kpi.exampleValue}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       );
     }
     
+    // Full expanded view (active or not collapsed)
     return (
       <div
         ref={(el) => { stepRefs.current[RESEARCH_STEP_INDEX] = el; }}
         key="research-step"
-        className={`transition-all duration-500 ease-out w-full ${
+        className={`transition-all duration-500 ease-out w-full focus:outline-none ${
           isActive
             ? 'opacity-100 translate-y-0 scale-100'
             : isComplete
@@ -967,6 +1204,16 @@ export function ProgressiveCard({
         }`}
         style={{
           animation: isActive && !isComplete ? 'materialFadeIn 0.4s cubic-bezier(0.4, 0.0, 0.2, 1)' : undefined,
+        }}
+        tabIndex={isActive ? 0 : -1}
+        onKeyDown={(e) => {
+          // Enter key advances to next step (same as Next button)
+          if (e.key === 'Enter' && isComplete && isActive) {
+            e.preventDefault();
+            e.stopPropagation();
+            collapseStepImmediately(RESEARCH_STEP_INDEX);
+            handleNext();
+          }
         }}
         onMouseLeave={() => {
           // If this is a collapsed step that was hovered, collapse it when mouse leaves
@@ -984,6 +1231,37 @@ export function ProgressiveCard({
               and synthesize best practices so the proposal is grounded in real competitive context.
             </p>
           </div>
+          
+          {/* KPI Prediction Banner */}
+          {displayResearch.kpi && (
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">KPI</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-sm font-bold text-gray-900">Predicted Success Metric</h4>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded-full">
+                      KPI 1
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 mb-1">
+                    {displayResearch.kpi.name}
+                  </p>
+                  <p className="text-xs text-gray-600 mb-2">
+                    {displayResearch.kpi.description}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500">Target:</span>
+                    <span className="text-sm font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">
+                      {displayResearch.kpi.exampleValue}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Market Context */}
@@ -1066,7 +1344,7 @@ export function ProgressiveCard({
     const isActive = currentStep === stepIndex;
     const answer = answers.find(a => a.questionId === question.id);
     const isComplete = isStepComplete(stepIndex);
-    const isCollapsed = collapsedSteps.has(stepIndex) && !isActive;
+    const isCollapsed = collapsedSteps.has(stepIndex) && (currentStep === -1 || !isActive);
     const isHovered = hoveredStep === stepIndex;
     
     // Collapsed view
@@ -1108,7 +1386,7 @@ export function ProgressiveCard({
         ref={(el) => { stepRefs.current[stepIndex] = el; }}
         key={question.id}
         className={`transition-all duration-500 ease-out flex items-center gap-3 min-w-0 w-full ${
-          isActive
+          (isActive || focusedInput === stepIndex)
             ? 'opacity-100 translate-y-0 scale-100'
             : isComplete
             ? 'opacity-60 translate-y-0 scale-[0.98]'
@@ -1131,6 +1409,26 @@ export function ProgressiveCard({
               value={(answer?.value as string) || ''}
               onChange={(e) => handleQuestionAnswer(question, e.target.value)}
               onClick={() => handleFieldClick(stepIndex)}
+              onFocus={() => {
+                setFocusedInput(stepIndex);
+                if (currentStep === -1) {
+                  setCurrentStep(stepIndex);
+                  setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                }
+              }}
+              onBlur={() => {
+                setFocusedInput(null);
+              }}
+              onMouseEnter={() => {
+                if (currentStep === -1 || currentStep === stepIndex) {
+                  setFocusedInput(stepIndex);
+                }
+              }}
+              onMouseLeave={() => {
+                if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`input[data-question-id="${question.id}"]`)) {
+                  setFocusedInput(null);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && isStepComplete(stepIndex)) {
                   e.preventDefault();
@@ -1139,12 +1437,12 @@ export function ProgressiveCard({
                 }
               }}
               placeholder={question.text}
+              data-question-id={question.id}
               className={`flex-1 px-4 py-3 text-base border-2 rounded-xl transition-all duration-200 ${
-                isActive
+                (focusedInput === stepIndex || hoveredStep === stepIndex)
                   ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                   : 'border-gray-200 bg-gray-50'
               } focus:outline-none placeholder:text-gray-400 placeholder:break-words`}
-              autoFocus={isActive}
             />
             {isStepComplete(stepIndex) && (
               <button
@@ -1176,14 +1474,34 @@ export function ProgressiveCard({
                   placeholder={question.text}
                   value=""
                   onChange={() => {}}
+                  onFocus={() => {
+                    setFocusedInput(stepIndex);
+                    if (currentStep === -1) {
+                      setCurrentStep(stepIndex);
+                      setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                    }
+                  }}
+                  onBlur={() => {
+                    setFocusedInput(null);
+                  }}
+                  onMouseEnter={() => {
+                    if (currentStep === -1 || currentStep === stepIndex) {
+                      setFocusedInput(stepIndex);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (focusedInput === stepIndex && document.activeElement !== document.querySelector(`textarea[data-question-id="${question.id}"]`)) {
+                      setFocusedInput(null);
+                    }
+                  }}
+                  data-question-id={question.id}
                   className={`flex-1 min-w-0 px-4 py-2 text-base border-2 rounded-xl transition-all duration-200 cursor-pointer resize-none overflow-hidden min-h-[40px] ${
-                    isActive
+                    (focusedInput === stepIndex || hoveredStep === stepIndex)
                       ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                       : 'border-gray-200 bg-gray-50'
                   } focus:outline-none placeholder:text-gray-400 placeholder:break-words`}
                   style={{ height: 'auto' }}
                   rows={1}
-                  autoFocus={isActive}
                 />
               ) : (
                 <>
@@ -1196,7 +1514,11 @@ export function ProgressiveCard({
                       handleQuestionAnswer(question, newValue);
                       // If this completes the question, collapse it immediately after state update
                       if (newValue) {
-                        setTimeout(() => {
+                        createTimeout(() => {
+                          // Force completion check update
+                          const isComplete = allStepsComplete();
+                          setAllComplete(isComplete);
+                          
                           if (isStepComplete(stepIndex)) {
                             setCollapsedSteps(prev => {
                               if (!prev.has(stepIndex)) {
@@ -1205,42 +1527,56 @@ export function ProgressiveCard({
                               return prev;
                             });
                           }
-                        }, 100);
+                        }, 150);
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        e.preventDefault();
                         const currentValue = e.currentTarget.value;
                         if (currentValue) {
                           // Ensure answer is saved first
                           if (!answer || answer.value !== currentValue) {
                             handleQuestionAnswer(question, currentValue);
                           }
-                          // Then check completion and advance
-                          setTimeout(() => {
-                            if (isStepComplete(stepIndex)) {
-                              e.preventDefault();
-                              collapseStepImmediately(stepIndex, true);
-                              handleNext();
-                            }
-                          }, 50);
+                          // Then check completion and advance immediately (same as Next button)
+                          if (isStepComplete(stepIndex)) {
+                            // Force completion check update
+                            createTimeout(() => {
+                              const isComplete = allStepsComplete();
+                              setAllComplete(isComplete);
+                            }, 100);
+                            collapseStepImmediately(stepIndex, true);
+                            handleNext();
+                          }
+                        } else {
+                          // If no value, just open dropdown
+                          toggleQuestionDropdown(questionIndex);
                         }
                       }
                     }}
+                    onFocus={() => {
+                      setFocusedInput(stepIndex);
+                      if (currentStep === -1) {
+                        setCurrentStep(stepIndex);
+                        setVisibleSteps(prev => new Set([...prev, stepIndex]));
+                      }
+                    }}
                     onBlur={() => {
-                      setTimeout(() => toggleQuestionDropdown(questionIndex), 200);
+                      setFocusedInput(null);
+                      createTimeout(() => toggleQuestionDropdown(questionIndex), 200);
                     }}
                     onClick={(e) => {
                       // Ensure dropdown opens on click
                       e.stopPropagation();
                     }}
                     className={`flex-1 min-w-0 px-4 py-3 text-base border-2 rounded-xl transition-all duration-200 max-w-full ${
-                      isActive
+                      (focusedInput === stepIndex || hoveredStep === stepIndex)
                         ? 'border-blue-500 bg-white shadow-lg focus:ring-4 focus:ring-blue-500/20'
                         : 'border-gray-200 bg-gray-50'
                     } focus:outline-none`}
                     style={{ maxWidth: '100%' }}
-                    autoFocus={openDropdowns.has(stepIndex) || isActive}
+                    autoFocus={openDropdowns.has(stepIndex)}
                   >
                     <option value="">{question.text}</option>
                     {question.options?.map(opt => (
@@ -1272,7 +1608,7 @@ export function ProgressiveCard({
                                 // First, clear currentStep so the step can be collapsed (isCollapsed requires !isActive)
                                 setCurrentStep(-1);
                                 
-                                setTimeout(() => {
+                                createTimeout(() => {
                                   // First, collapse this step
                                   setCollapsedSteps(prev => new Set([...prev, stepIndex]));
                                   
@@ -1292,10 +1628,16 @@ export function ProgressiveCard({
                                     });
                                     return newCollapsed;
                                   });
+                                  
+                                  // Force completion check update after all state has settled
+                                  createTimeout(() => {
+                                    const isComplete = allStepsComplete();
+                                    setAllComplete(isComplete);
+                                  }, 200);
                                 }, 150);
                               } else {
                                 // For non-last steps, use normal handleNext
-                                setTimeout(() => {
+                                createTimeout(() => {
                                   setCollapsedSteps(prev => new Set([...prev, stepIndex]));
                                   handleNext();
                                 }, 100);
@@ -1404,6 +1746,48 @@ export function ProgressiveCard({
             transform: translateY(0) scale(1);
           }
         }
+        
+        /* Molten Gold Flow Animation */
+        @keyframes moltenFlow {
+          0%, 100% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+        }
+        
+        /* Shimmer Wave Animation */
+        @keyframes shimmerWave {
+          0% {
+            transform: translateX(-100%) skewX(-15deg);
+          }
+          100% {
+            transform: translateX(200%) skewX(-15deg);
+          }
+        }
+        
+        /* Alternative: Bubble Float Animation (for Treatment 2) */
+        @keyframes bubbleFloat {
+          0%, 100% {
+            transform: translateY(0);
+            opacity: 0.3;
+          }
+          50% {
+            transform: translateY(-10px);
+            opacity: 0.6;
+          }
+        }
+        
+        /* Alternative: Sparkle Animation (for Treatment 3) */
+        @keyframes sparkle {
+          0% {
+            background-position: 0 0;
+          }
+          100% {
+            background-position: 20px 20px;
+          }
+        }
       `}</style>
       
       <div className="relative group">
@@ -1437,21 +1821,12 @@ export function ProgressiveCard({
               
               if (!hasAtLeastOneAnswer) return null;
               
-              // Force recalculation by checking answers directly
+              // Use state variable for completion (updated in useEffect)
               const progress = calculateProgress();
-              // Double-check completion - sometimes answers prop hasn't updated yet
-              const isComplete = allStepsComplete();
+              const isComplete = allComplete;
               
               // When complete, progress should be 100%
               const displayProgress = isComplete ? 100 : progress;
-              
-              // Debug: log completion status (uncomment to debug)
-              if (forceUpdate > 0) { // Only log after initial render
-                console.log('Button State - Progress:', progress, 'Display:', displayProgress, 'Complete:', isComplete, 'Answers:', answers.length, 'Questions:', questions.length);
-                console.log('Basic steps complete:', BASIC_STEPS.every((_, i) => isStepComplete(i)));
-                console.log('Research complete:', isStepComplete(RESEARCH_STEP_INDEX));
-                console.log('Questions complete:', questions.every((_, i) => isStepComplete(RESEARCH_STEP_INDEX + 1 + i)));
-              }
               
               return (
                 <div className="transition-all duration-500 ease-out opacity-100 translate-y-0 scale-100" style={{ paddingTop: '24px', marginTop: '24px' }}>
@@ -1462,13 +1837,8 @@ export function ProgressiveCard({
                       
                       // Double-check completion at click time
                       const clickTimeComplete = allStepsComplete();
-                      console.log('Button clicked! Complete:', clickTimeComplete, 'Progress:', calculateProgress());
                       
                       if (!clickTimeComplete) {
-                        console.log('Button clicked but not complete. Progress:', calculateProgress());
-                        console.log('Basic:', BASIC_STEPS.every((_, i) => isStepComplete(i)));
-                        console.log('Research:', isStepComplete(RESEARCH_STEP_INDEX));
-                        console.log('Questions:', questions.map((q, i) => ({ q: q.id, complete: isStepComplete(RESEARCH_STEP_INDEX + 1 + i) })));
                         return;
                       }
                       
@@ -1477,21 +1847,107 @@ export function ProgressiveCard({
                         setEstimate(newEstimate);
                       }
                     }}
-                    disabled={false}
+                    disabled={!isComplete}
                     className={`w-full group relative flex items-center justify-center px-8 py-5 rounded-xl font-bold text-lg transition-all duration-300 shadow-2xl overflow-hidden ${
                       isComplete
                         ? 'hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700] text-black hover:from-[#FFC700] hover:via-[#FFD700] hover:to-[#FFC700] hover:shadow-[#FFD700]/50 cursor-pointer'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }`}
                   >
-                    {/* Progress background fill - always show full width when complete */}
+                    {/* TREATMENT 1: Molten Gold with Animated Flow & Progressive Glow - ACTIVE */}
                     <div
-                      className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700] transition-all duration-500 ease-out"
+                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
                       style={{ 
                         width: `${displayProgress}%`,
-                        opacity: isComplete ? 1 : 0.6
                       }}
-                    />
+                    >
+                      {/* Base molten gold gradient */}
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFA500] via-[#FFD700] to-[#FFA500]"
+                        style={{
+                          backgroundSize: '200% 100%',
+                          animation: 'moltenFlow 3s ease-in-out infinite',
+                          opacity: 0.7 + (displayProgress / 100) * 0.3, // Gets brighter as progress increases
+                        }}
+                      />
+                      
+                      {/* Animated shimmer wave */}
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        style={{
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmerWave 2s ease-in-out infinite',
+                          transform: 'translateX(-100%)',
+                        }}
+                      />
+                      
+                      {/* Progressive glow that intensifies with progress */}
+                      <div 
+                        className="absolute inset-0"
+                        style={{
+                          boxShadow: `0 0 ${20 + (displayProgress / 100) * 40}px rgba(255, 215, 0, ${0.4 + (displayProgress / 100) * 0.6})`,
+                          filter: `brightness(${1 + (displayProgress / 100) * 0.5})`,
+                        }}
+                      />
+                    </div>
+                    
+                    {/* TREATMENT 2: Liquid Fill with Bubbles (Alternative - commented out) */}
+                    {/* Uncomment to try this treatment instead:
+                    <div
+                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
+                      style={{ width: `${displayProgress}%` }}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-b from-[#FFD700] via-[#FFA500] to-[#FF8C00]" />
+                      <div 
+                        className="absolute inset-0 opacity-30"
+                        style={{
+                          backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 2px, transparent 2px)',
+                          backgroundSize: '30px 30px',
+                          animation: 'bubbleFloat 4s ease-in-out infinite',
+                        }}
+                      />
+                      <div 
+                        className="absolute inset-0"
+                        style={{
+                          boxShadow: `inset 0 0 ${30 + (displayProgress / 100) * 50}px rgba(255, 215, 0, ${0.5 + (displayProgress / 100) * 0.5})`,
+                          filter: `brightness(${1 + (displayProgress / 100) * 0.3})`,
+                        }}
+                      />
+                      <div 
+                        className="absolute inset-0"
+                        style={{
+                          boxShadow: `0 0 ${15 + (displayProgress / 100) * 35}px rgba(255, 165, 0, ${0.3 + (displayProgress / 100) * 0.7})`,
+                        }}
+                      />
+                    </div>
+                    */}
+                    
+                    {/* TREATMENT 3: Particle Sparkle (Alternative - commented out) */}
+                    {/* Uncomment to try this treatment instead:
+                    <div
+                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
+                      style={{ width: `${displayProgress}%` }}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700]" />
+                      <div 
+                        className="absolute inset-0"
+                        style={{
+                          backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)`,
+                          backgroundSize: '20px 20px',
+                          backgroundPosition: '0 0',
+                          animation: 'sparkle 1.5s linear infinite',
+                          opacity: 0.3 + (displayProgress / 100) * 0.7,
+                        }}
+                      />
+                      <div 
+                        className="absolute inset-0"
+                        style={{
+                          boxShadow: `0 0 ${15 + (displayProgress / 100) * 35}px rgba(255, 215, 0, ${0.3 + (displayProgress / 100) * 0.7})`,
+                          filter: `brightness(${1 + (displayProgress / 100) * 0.4})`,
+                        }}
+                      />
+                    </div>
+                    */}
                     
                     {/* Shimmer effect - only when complete */}
                     {isComplete && (
@@ -1499,9 +1955,11 @@ export function ProgressiveCard({
                     )}
                     
                     <span className="relative flex items-center gap-3 z-10">
-                      Generate Estimate
                       {isComplete && (
-                        <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                        <>
+                          Generate Estimate
+                          <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                        </>
                       )}
                     </span>
                   </button>
