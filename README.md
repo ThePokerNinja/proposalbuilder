@@ -1,5 +1,7 @@
 # Proposal Builder
 
+<!-- Build triggered: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -->
+
 An AI-powered, voice-interactive platform for creating transparent project proposals for digital projects (design, branding, websites). This tool asks strategic questions to assess scope, audience, and goals, then provides a detailed estimate with real-time adjustment capabilities.
 
 ## Features
