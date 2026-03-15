@@ -481,7 +481,7 @@ export function ProposalBuilder() {
   if (flowStep === 'intro') {
     return (
       <>
-      <div className="min-h-screen portfolio-bg pb-24 px-4 relative overflow-hidden" style={{ marginLeft: '-500px', marginRight: '-500px', paddingLeft: '500px', paddingRight: '500px' }}>
+      <div className="min-h-screen portfolio-bg pb-24 px-4 relative" style={{ marginLeft: '-500px', marginRight: '-500px', paddingLeft: '500px', paddingRight: '500px' }}>
         <TopBar />
 
         {/* Animated background elements */}

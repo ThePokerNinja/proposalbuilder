@@ -2018,7 +2018,7 @@ export function ProgressiveCard({
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'relative' : ''}`}>
+      <div className={`w-full ${estimate ? 'relative' : ''}`} style={estimate ? { minHeight: '100%' } : {}}>
         {/* Left Column: Cards and Button - Right-aligned to horizontal center */}
         {/* 
           Layout breakdown (percentage-based):
