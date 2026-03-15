@@ -950,9 +950,18 @@ export function EstimateVisualization({
         className="mb-8"
         onMouseEnter={() => {
           setIsSection2Open(true);
-          setIsSection1Open(false);
+          // Only close Section 1 if Section 3 is open (to keep at least one section open)
+          if (isSection3Open) {
+            setIsSection1Open(false);
+          }
         }}
-        onMouseLeave={() => setIsSection2Open(false)}
+        onMouseLeave={() => {
+          setIsSection2Open(false);
+          // Ensure at least Section 1 or Section 3 is open
+          if (!isSection1Open && !isSection3Open) {
+            setIsSection1Open(true);
+          }
+        }}
       >
         {isSection2Open ? (
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
@@ -1313,9 +1322,18 @@ export function EstimateVisualization({
         className="mb-8"
         onMouseEnter={() => {
           setIsSection3Open(true);
-          setIsSection1Open(false);
+          // Only close Section 1 if Section 2 is open (to keep at least one section open)
+          if (isSection2Open) {
+            setIsSection1Open(false);
+          }
         }}
-        onMouseLeave={() => setIsSection3Open(false)}
+        onMouseLeave={() => {
+          setIsSection3Open(false);
+          // Ensure at least Section 1 or Section 2 is open
+          if (!isSection1Open && !isSection2Open) {
+            setIsSection1Open(true);
+          }
+        }}
       >
         {isSection3Open ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
