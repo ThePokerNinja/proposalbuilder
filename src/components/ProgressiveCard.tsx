@@ -1506,7 +1506,15 @@ export function ProgressiveCard({
     // Show questions if:
     // 1. Estimate exists (they'll be collapsed), OR
     // 2. This specific question is in visibleSteps (progressive display - one at a time)
+    // Always show investment-clarity question when estimate exists
     if (!estimate && !visibleSteps.has(stepIndex)) return null;
+    if (estimate && question.id === 'investment-clarity') {
+      // Ensure investment-clarity is always visible when estimate exists
+      // Force it to be in visibleSteps if not already
+      if (!visibleSteps.has(stepIndex)) {
+        setVisibleSteps(prev => new Set([...prev, stepIndex]));
+      }
+    }
     
     const isActive = currentStep === stepIndex;
     const answer = answers.find(a => a.questionId === question.id);
@@ -1551,7 +1559,8 @@ export function ProgressiveCard({
     }
     
     // When estimate exists, always show question (even if not complete)
-    const shouldShow = estimate || (isActive || focusedInput === stepIndex) || isComplete || visibleSteps.has(stepIndex);
+    // Also always show investment-clarity question when estimate exists
+    const shouldShow = estimate || (isActive || focusedInput === stepIndex) || isComplete || visibleSteps.has(stepIndex) || (estimate && question.id === 'investment-clarity');
     return (
       <div
         ref={(el) => { stepRefs.current[stepIndex] = el; }}
