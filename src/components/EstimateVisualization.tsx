@@ -243,6 +243,11 @@ export function EstimateVisualization({
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
+  // Section collapse/expand state
+  const [isSection1Open, setIsSection1Open] = useState(true); // Default open
+  const [isSection2Open, setIsSection2Open] = useState(false); // Default closed
+  const [isSection3Open, setIsSection3Open] = useState(false); // Default closed
+
   // Generate initial summary, problem statement, and measures of success from answers + market research
   useEffect(() => {
     if (answers.length > 0) {
@@ -757,80 +762,81 @@ export function EstimateVisualization({
           {/* ============================================ */}
           {/* SECTION 1: Header, Total Cost, Timeline Metrics, and Summary Sections */}
           {/* ============================================ */}
-          
-          {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
-            <p className="text-sm text-gray-500">Customize your estimate in real-time</p>
-          </div>
+          {isSection1Open ? (
+            <>
+              {/* Header */}
+              <div className="mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
+                <p className="text-sm text-gray-500">Customize your estimate in real-time</p>
+              </div>
 
-          {/* Total Project Cost */}
-      <div 
-        className="mb-6 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden"
-        style={{
-          backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center center',
-          backgroundRepeat: 'no-repeat',
-          minHeight: '150px'
-        }}
-      >
-        {/* Overlay for text readability */}
-        <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
-        <div className="relative z-10">
-          <div>
-            <p className="text-sm font-semibold text-white/90 mb-1">Total Project Cost</p>
-            <p className="text-2xl font-bold text-white mb-2">
-              ${(selectedTotalHours * 125).toLocaleString()}
-            </p>
-            <p className="text-base font-semibold text-white">{Math.round(selectedTotalHours)}h</p>
-            <p className="text-sm text-white/80">@ $125/hr</p>
-          </div>
-        </div>
-      </div>
+              {/* Total Project Cost */}
+              <div 
+                className="mb-6 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden" 
+                style={{
+                  backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center center',
+                  backgroundRepeat: 'no-repeat',
+                  minHeight: '150px'
+                }}
+              >
+                {/* Overlay for text readability */}
+                <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
+                <div className="relative z-10">
+                  <div>
+                    <p className="text-sm font-semibold text-white/90 mb-1">Total Project Cost</p>
+                    <p className="text-2xl font-bold text-white mb-2">
+                      ${(selectedTotalHours * 125).toLocaleString()}
+                    </p>
+                    <p className="text-base font-semibold text-white">{Math.round(selectedTotalHours)}h</p>
+                    <p className="text-sm text-white/80">@ $125/hr</p>
+                  </div>
+                </div>
+              </div>
 
-      {/* Project Timeline Header - Clean Metrics */}
-      <div className="mb-6 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="flex items-center mb-1.5">
-              <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
-              <span className="text-xs font-medium text-gray-600">Start Date</span>
-            </div>
-            <p className="text-lg font-bold text-gray-900">
-              {startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center mb-1.5">
-              <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
-              <span className="text-xs font-medium text-gray-600">Timeline</span>
-            </div>
-            <p className="text-lg font-bold text-gray-900">
-              {calculatedTimeline.weeks} {calculatedTimeline.weeks === 1 ? 'wk' : 'wks'}
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center mb-1.5">
-              <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
-              <span className="text-xs font-medium text-gray-600">Hours</span>
-            </div>
-            <p className="text-lg font-bold text-gray-900">{Math.round(selectedTotalHours)}</p>
-          </div>
-          <div>
-            <div className="flex items-center mb-1.5">
-              <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
-              <span className="text-xs font-medium text-gray-600">Completion</span>
-            </div>
-            <p className="text-lg font-bold text-gray-900">
-              {formatDate(calculatedTimeline.endDate)}
-            </p>
-          </div>
-        </div>
-      </div>
+              {/* Project Timeline Header - Clean Metrics */}
+              <div className="mb-6 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="flex items-center mb-1.5">
+                      <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
+                      <span className="text-xs font-medium text-gray-600">Start Date</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center mb-1.5">
+                      <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
+                      <span className="text-xs font-medium text-gray-600">Timeline</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {calculatedTimeline.weeks} {calculatedTimeline.weeks === 1 ? 'wk' : 'wks'}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center mb-1.5">
+                      <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
+                      <span className="text-xs font-medium text-gray-600">Hours</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">{Math.round(selectedTotalHours)}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center mb-1.5">
+                      <Calendar className="w-4 h-4 text-portfolio-blue mr-1.5" />
+                      <span className="text-xs font-medium text-gray-600">Completion</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {formatDate(calculatedTimeline.endDate)}
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-      {/* Executive Summary, Problem Statement, Measure of Success */}
-      <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {/* Executive Summary, Problem Statement, Measure of Success */}
+              <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Executive Summary Column */}
         <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex items-center justify-between mb-1.5">
@@ -905,24 +911,61 @@ export function EstimateVisualization({
             Included in Statement of Work
           </p>
         </div>
-      </div>
-      {/* End Section 1 */}
+              </div>
+            </>
+          ) : (
+            /* Collapsed Section 1 - Show only Total Cost */
+            <div 
+              className="mb-8 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all hover:shadow-md"
+              style={{
+                backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center center',
+                backgroundRepeat: 'no-repeat',
+                minHeight: '80px'
+              }}
+              onMouseEnter={() => setIsSection1Open(true)}
+            >
+              <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
+              <div className="relative z-10 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-white/90 mb-1">Total Project Cost</p>
+                  <p className="text-xl font-bold text-white">
+                    ${(selectedTotalHours * 125).toLocaleString()}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-white">{Math.round(selectedTotalHours)}h</p>
+                  <p className="text-xs text-white/80">@ $125/hr</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* End Section 1 */}
 
       {/* ============================================ */}
       {/* SECTION 2: Resource Allocation (Adjust Task Hours + Task Hours Breakdown) */}
       {/* ============================================ */}
-      <div className="mb-8">
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900">Resource Allocation</h3>
-            <button
-              onClick={() => setShowAddTask(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-portfolio-blue text-white rounded-lg text-sm font-medium hover:bg-portfolio-blue-dark transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              Add Task
-            </button>
-          </div>
+      <div 
+        className="mb-8"
+        onMouseEnter={() => {
+          setIsSection2Open(true);
+          setIsSection1Open(false);
+        }}
+        onMouseLeave={() => setIsSection2Open(false)}
+      >
+        {isSection2Open ? (
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Resource Allocation</h3>
+              <button
+                onClick={() => setShowAddTask(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-portfolio-blue text-white rounded-lg text-sm font-medium hover:bg-portfolio-blue-dark transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Add Task
+              </button>
+            </div>
 
           {/* Combined Layout: Adjustments on Left, Chart on Right */}
           <div className="flex gap-6 items-start">
@@ -1160,7 +1203,32 @@ export function EstimateVisualization({
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
+          </div>
+        ) : (
+          /* Collapsed Section 2 - Show horizontal summary row */
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <h3 className="text-base font-bold text-gray-900">Resource Allocation</h3>
+                <div className="flex items-center gap-6 text-sm">
+                  <div>
+                    <span className="text-gray-500">Total Tasks: </span>
+                    <span className="font-semibold text-gray-900">{chartData.filter((d) => d.selected).length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Total Hours: </span>
+                    <span className="font-semibold text-portfolio-blue">{Math.round(selectedTotalHours)}h</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Est. Cost: </span>
+                    <span className="font-semibold text-portfolio-blue">${(selectedTotalHours * 125).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-400">Hover to expand</div>
+            </div>
+          </div>
+        )}
       </div>
       {/* End Section 2 */}
 
@@ -1241,7 +1309,16 @@ export function EstimateVisualization({
       {/* ============================================ */}
       {/* SECTION 3: Project Milestones and Timeline & Calendar */}
       {/* ============================================ */}
-      <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div 
+        className="mb-8"
+        onMouseEnter={() => {
+          setIsSection3Open(true);
+          setIsSection1Open(false);
+        }}
+        onMouseLeave={() => setIsSection3Open(false)}
+      >
+        {isSection3Open ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Milestones Breakdown - Left Column */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
@@ -1337,6 +1414,36 @@ export function EstimateVisualization({
             projectName={projectName}
           />
         </div>
+          </div>
+        ) : (
+          /* Collapsed Section 3 - Show horizontal summary row */
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all hover:shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <h3 className="text-base font-bold text-gray-900">Project Milestones & Timeline</h3>
+                <div className="flex items-center gap-6 text-sm">
+                  <div>
+                    <span className="text-gray-500">Milestones: </span>
+                    <span className="font-semibold text-gray-900">{milestoneData.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Timeline: </span>
+                    <span className="font-semibold text-portfolio-blue">{calculatedTimeline.weeks} {calculatedTimeline.weeks === 1 ? 'wk' : 'wks'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Start: </span>
+                    <span className="font-semibold text-gray-900">{startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">End: </span>
+                    <span className="font-semibold text-gray-900">{formatDate(calculatedTimeline.endDate)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-400">Hover to expand</div>
+            </div>
+          </div>
+        )}
       </div>
       {/* End Section 3 */}
 
