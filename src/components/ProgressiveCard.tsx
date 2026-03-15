@@ -2028,7 +2028,7 @@ export function ProgressiveCard({
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap items-start justify-center' : ''}`} style={estimate ? { gap: '2%' } : {}}>
+      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap items-start justify-center' : ''}`} style={estimate ? { gap: '1.75%' } : {}}>
         {/* Left Column: Cards and Button - Center-aligned with estimate */}
         <div 
           className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
