@@ -2415,9 +2415,9 @@ export function ProgressiveCard({
             data-estimate-section
             style={{ 
               animation: 'slideInRight 0.7s ease-out forwards',
-              width: '46.8%',
-              minWidth: '46.8%',
-              maxWidth: '46.8%',
+              width: '42.12%',
+              minWidth: '42.12%',
+              maxWidth: '42.12%',
               left: '51%', // Left edge at center (50%) + half gap (1%)
               top: 0
             }}
