@@ -917,7 +917,7 @@ export function EstimateVisualization({
           </div>
 
           {/* Combined Layout: Adjustments on Left, Chart on Right */}
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-start">
             {/* Left: Adjust Task Hours */}
             <div className="w-64 flex-shrink-0">
               <h4 className="text-sm font-semibold text-gray-700 mb-3 text-left">Adjust Task Hours</h4>
