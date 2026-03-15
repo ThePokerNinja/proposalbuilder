@@ -2398,16 +2398,16 @@ export function ProgressiveCard({
             })()}
         </div>
         
-        {/* Right Column: Estimate Visualization - 36% width (20% wider than 30%) */}
+        {/* Right Column: Estimate Visualization - 46.8% width (30% increase from 36%) */}
         {estimate && setEstimate ? (
           <div 
             className="flex-shrink-0"
             data-estimate-section
             style={{ 
               animation: 'slideInRight 0.7s ease-out forwards',
-              width: '36%',
-              minWidth: '36%',
-              maxWidth: '36%'
+              width: '46.8%',
+              minWidth: '46.8%',
+              maxWidth: '46.8%'
             }}
           >
             <EstimateVisualization
