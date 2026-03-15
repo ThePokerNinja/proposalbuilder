@@ -753,13 +753,18 @@ export function EstimateVisualization({
         <div className="relative group">
           <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
           <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
-          {/* Header - Compact */}
+          
+          {/* ============================================ */}
+          {/* SECTION 1: Header, Total Cost, Timeline Metrics, and Summary Sections */}
+          {/* ============================================ */}
+          
+          {/* Header */}
           <div className="mb-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
             <p className="text-sm text-gray-500">Customize your estimate in real-time</p>
           </div>
 
-      {/* Total Project Cost */}
+          {/* Total Project Cost */}
       <div 
         className="mb-6 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden"
         style={{
@@ -824,8 +829,8 @@ export function EstimateVisualization({
         </div>
       </div>
 
-      {/* Executive Summary Row - Three Columns */}
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3">
+      {/* Executive Summary, Problem Statement, Measure of Success */}
+      <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Executive Summary Column */}
         <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex items-center justify-between mb-1.5">
@@ -901,9 +906,12 @@ export function EstimateVisualization({
           </p>
         </div>
       </div>
+      {/* End Section 1 */}
 
-      {/* Row 1: Resource Allocation and Adjust Task Hours in Same Content Area */}
-      <div className="mb-6">
+      {/* ============================================ */}
+      {/* SECTION 2: Resource Allocation (Adjust Task Hours + Task Hours Breakdown) */}
+      {/* ============================================ */}
+      <div className="mb-8">
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900">Resource Allocation</h3>
@@ -1154,6 +1162,7 @@ export function EstimateVisualization({
           </div>
         </div>
       </div>
+      {/* End Section 2 */}
 
       {/* Add Task Modal */}
       {showAddTask && (
@@ -1229,8 +1238,10 @@ export function EstimateVisualization({
         </div>
       )}
 
-      {/* Row 2: Milestones Breakdown and Timeline Calendar - Side by Side */}
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* ============================================ */}
+      {/* SECTION 3: Project Milestones and Timeline & Calendar */}
+      {/* ============================================ */}
+      <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Milestones Breakdown - Left Column */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
@@ -1327,8 +1338,11 @@ export function EstimateVisualization({
           />
         </div>
       </div>
+      {/* End Section 3 */}
 
-      {/* Row 4: Statement of Work - Full Width (compact) */}
+      {/* ============================================ */}
+      {/* SECTION 4: Statement of Work, Download, and Send Preview */}
+      {/* ============================================ */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
@@ -1391,8 +1405,10 @@ export function EstimateVisualization({
             The PDF includes all project details, timeline, milestones, and terms ready for review and approval.
           </p>
         </div>
-        </div>
       </div>
+      {/* End Section 4 */}
+          </div>
+          {/* Close main content div */}
       
       {/* Sender Info Modal */}
       {showSenderModal && (
