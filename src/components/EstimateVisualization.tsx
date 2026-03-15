@@ -763,10 +763,11 @@ export function EstimateVisualization({
           {/* SECTION 1: Header, Total Cost, Timeline Metrics, and Summary Sections */}
           {/* ============================================ */}
           <div 
-            className="transition-all duration-500 ease-in-out overflow-hidden"
+            className="overflow-hidden"
             style={{
               maxHeight: isSection1Open ? '5000px' : '50px',
               opacity: isSection1Open ? 1 : 1,
+              transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
             }}
           >
           {isSection1Open ? (
@@ -775,11 +776,13 @@ export function EstimateVisualization({
                 // Check if mouse is moving below Section 1 (towards Section 2)
                 const rect = e.currentTarget.getBoundingClientRect();
                 const mouseY = e.clientY;
-                // If mouse is below the section, open Section 2
+                // If mouse is below the section, open Section 2 with smooth transition
                 if (mouseY > rect.bottom) {
                   setIsSection2Open(true);
-                  setIsSection1Open(false);
-                  setIsSection3Open(false);
+                  setTimeout(() => {
+                    setIsSection1Open(false);
+                    setIsSection3Open(false);
+                  }, 50);
                 }
               }}
             >
@@ -935,7 +938,7 @@ export function EstimateVisualization({
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
-              className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
+              className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer hover:shadow-md flex items-center"
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
                 backgroundSize: 'cover',
@@ -945,13 +948,16 @@ export function EstimateVisualization({
                 paddingLeft: '20px',
                 paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
-                transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
+                transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
               }}
               onMouseEnter={() => {
+                // Immediately open Section 1
                 setIsSection1Open(true);
-                // Close both Section 2 and Section 3 - only one section (1-3) can be open at a time
-                setIsSection2Open(false);
-                setIsSection3Open(false);
+                // Close other sections with a slight delay for smoother transition
+                setTimeout(() => {
+                  setIsSection2Open(false);
+                  setIsSection3Open(false);
+                }, 50);
               }}
             >
               <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
@@ -978,22 +984,28 @@ export function EstimateVisualization({
       <div 
         className="mb-8"
         onMouseEnter={() => {
+          // Immediately open Section 2
           setIsSection2Open(true);
-          // Close both Section 1 and Section 3 - only one section (1-3) can be open at a time
-          setIsSection1Open(false);
-          setIsSection3Open(false);
+          // Close other sections with a slight delay for smoother transition
+          setTimeout(() => {
+            setIsSection1Open(false);
+            setIsSection3Open(false);
+          }, 50);
         }}
         onMouseLeave={() => {
           setIsSection2Open(false);
-          // When Section 2 closes, open Section 1 to ensure at least one section is open
-          setIsSection1Open(true);
+          // When Section 2 closes, open Section 1 with a slight delay for smoother transition
+          setTimeout(() => {
+            setIsSection1Open(true);
+          }, 100);
         }}
       >
         <div 
-          className="transition-all duration-500 ease-in-out overflow-hidden"
+          className="overflow-hidden"
           style={{
             maxHeight: isSection2Open ? '5000px' : '50px',
             opacity: isSection2Open ? 1 : 1,
+            transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
           }}
         >
         {isSection2Open ? (
@@ -1249,13 +1261,13 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 2 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md flex items-center"
             style={{
               minHeight: '50px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
-              transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
+              transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
             }}
           >
             <div className="flex items-center justify-between">
@@ -1364,22 +1376,28 @@ export function EstimateVisualization({
       <div 
         className="mb-8"
         onMouseEnter={() => {
+          // Immediately open Section 3
           setIsSection3Open(true);
-          // Close both Section 1 and Section 2 - only one section (1-3) can be open at a time
-          setIsSection1Open(false);
-          setIsSection2Open(false);
+          // Close other sections with a slight delay for smoother transition
+          setTimeout(() => {
+            setIsSection1Open(false);
+            setIsSection2Open(false);
+          }, 50);
         }}
         onMouseLeave={() => {
           setIsSection3Open(false);
-          // When Section 3 closes, open Section 1 to ensure at least one section is open
-          setIsSection1Open(true);
+          // When Section 3 closes, open Section 1 with a slight delay for smoother transition
+          setTimeout(() => {
+            setIsSection1Open(true);
+          }, 100);
         }}
       >
         <div 
-          className="transition-all duration-500 ease-in-out overflow-hidden"
+          className="overflow-hidden"
           style={{
             maxHeight: isSection3Open ? '5000px' : '50px',
             opacity: isSection3Open ? 1 : 1,
+            transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
           }}
         >
         {isSection3Open ? (
@@ -1483,13 +1501,13 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 3 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md flex items-center"
             style={{
               minHeight: '50px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection3Open ? 0 : 1,
-              transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
+              transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
             }}
           >
             <div className="flex items-center justify-between">
