@@ -942,8 +942,8 @@ export function EstimateVisualization({
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
                 minHeight: '160px',
-                paddingTop: '48px',
-                paddingBottom: '48px',
+                paddingTop: '24px',
+                paddingBottom: '24px',
                 paddingLeft: '20px',
                 paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
@@ -1254,8 +1254,8 @@ export function EstimateVisualization({
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
               minHeight: '160px',
-              paddingTop: '48px',
-              paddingBottom: '48px',
+              paddingTop: '28px',
+              paddingBottom: '28px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
@@ -1490,8 +1490,8 @@ export function EstimateVisualization({
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
               minHeight: '160px',
-              paddingTop: '48px',
-              paddingBottom: '48px',
+              paddingTop: '28px',
+              paddingBottom: '28px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection3Open ? 0 : 1,
