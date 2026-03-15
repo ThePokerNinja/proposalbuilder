@@ -460,7 +460,6 @@ export function EstimateVisualization({
     marketResearch: MarketResearchResult | null
   ): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
-    const hasAnswers = answers.length > 0;
     const hasResearch = marketResearch !== null;
     
     // Start with explicit problem statement if available
@@ -529,8 +528,8 @@ export function EstimateVisualization({
 
   // Generate before/after KPI comparison for measure of success
   function generateIntelligentMeasuresOfSuccess(
-    projectName: string,
-    projectSummary: string,
+    _projectName: string,
+    _projectSummary: string,
     answers: Answer[],
     marketResearch: MarketResearchResult | null
   ): string {
@@ -619,7 +618,8 @@ export function EstimateVisualization({
     return measures;
   }
 
-  // Legacy function kept for backward compatibility
+  // Legacy function kept for backward compatibility (currently unused but kept for potential future use)
+  // @ts-expect-error - Legacy function, intentionally unused
   function generateSummaryFromAnswers(projectName: string, _initialSummary: string, answers: Answer[]): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
     
