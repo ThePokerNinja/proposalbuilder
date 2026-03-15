@@ -765,7 +765,7 @@ export function EstimateVisualization({
           <div 
             className="transition-all duration-500 ease-in-out overflow-hidden"
             style={{
-              maxHeight: isSection1Open ? '5000px' : '100px',
+              maxHeight: isSection1Open ? '5000px' : '50px',
               opacity: isSection1Open ? 1 : 1,
             }}
           >
@@ -941,7 +941,7 @@ export function EstimateVisualization({
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
-                minHeight: '100px',
+                minHeight: '50px',
                 paddingTop: '24px',
                 paddingBottom: '24px',
                 paddingLeft: '20px',
@@ -994,7 +994,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection2Open ? '5000px' : '100px',
+            maxHeight: isSection2Open ? '5000px' : '50px',
             opacity: isSection2Open ? 1 : 1,
           }}
         >
@@ -1253,7 +1253,7 @@ export function EstimateVisualization({
           <div 
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
-              minHeight: '100px',
+              minHeight: '50px',
               paddingTop: '28px',
               paddingBottom: '28px',
               paddingLeft: '20px',
@@ -1382,7 +1382,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection3Open ? '5000px' : '100px',
+            maxHeight: isSection3Open ? '5000px' : '50px',
             opacity: isSection3Open ? 1 : 1,
           }}
         >
@@ -1489,7 +1489,7 @@ export function EstimateVisualization({
           <div 
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
-              minHeight: '100px',
+              minHeight: '50px',
               paddingTop: '28px',
               paddingBottom: '28px',
               paddingLeft: '20px',
