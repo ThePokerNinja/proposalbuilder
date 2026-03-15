@@ -2018,7 +2018,7 @@ export function ProgressiveCard({
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap gap-8 items-start justify-start' : ''}`}>
+      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap gap-8 items-start justify-center' : ''}`}>
         {/* Left Column: Cards and Button - 30% width with 100px left padding when estimate appears */}
         <div 
           className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
