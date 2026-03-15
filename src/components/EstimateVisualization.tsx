@@ -753,15 +753,11 @@ export function EstimateVisualization({
         <div className="relative group">
           <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
           <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
-          {/* Main Layout: Left side with estimate content, Right side with two vertical cards */}
-          <div className="flex gap-6 items-start">
-            {/* Left Column: Estimate Content */}
-            <div className="flex-1 min-w-0">
-              {/* Header - Compact */}
-              <div className="mb-6">
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
-                <p className="text-sm text-gray-500">Customize your estimate in real-time</p>
-              </div>
+          {/* Header - Compact */}
+          <div className="mb-6">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
+            <p className="text-sm text-gray-500">Customize your estimate in real-time</p>
+          </div>
 
       {/* Total Project Cost */}
       <div 
@@ -906,10 +902,6 @@ export function EstimateVisualization({
         </div>
       </div>
 
-            </div>
-
-            {/* Right Column: Resource Allocation - Two Vertical Cards - Aligned to top */}
-            <div className="w-[650px] flex-shrink-0">
       {/* Row 1: Resource Allocation and Adjust Task Hours in Same Content Area */}
       <div className="mb-6">
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
@@ -1162,8 +1154,6 @@ export function EstimateVisualization({
           </div>
         </div>
       </div>
-            </div>
-          </div>
 
       {/* Add Task Modal */}
       {showAddTask && (
