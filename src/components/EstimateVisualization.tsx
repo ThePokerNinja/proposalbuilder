@@ -924,7 +924,12 @@ export function EstimateVisualization({
                 backgroundRepeat: 'no-repeat',
                 minHeight: '80px'
               }}
-              onMouseEnter={() => setIsSection1Open(true)}
+              onMouseEnter={() => {
+                setIsSection1Open(true);
+                // Close both Section 2 and Section 3 - only one section (1-3) can be open at a time
+                setIsSection2Open(false);
+                setIsSection3Open(false);
+              }}
             >
               <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
               <div className="relative z-10 flex items-center justify-between">
@@ -950,17 +955,14 @@ export function EstimateVisualization({
         className="mb-8"
         onMouseEnter={() => {
           setIsSection2Open(true);
-          // Only close Section 1 if Section 3 is open (to keep at least one section open)
-          if (isSection3Open) {
-            setIsSection1Open(false);
-          }
+          // Close both Section 1 and Section 3 - only one section (1-3) can be open at a time
+          setIsSection1Open(false);
+          setIsSection3Open(false);
         }}
         onMouseLeave={() => {
           setIsSection2Open(false);
-          // Ensure at least Section 1 or Section 3 is open
-          if (!isSection1Open && !isSection3Open) {
-            setIsSection1Open(true);
-          }
+          // When Section 2 closes, open Section 1 to ensure at least one section is open
+          setIsSection1Open(true);
         }}
       >
         {isSection2Open ? (
@@ -1322,17 +1324,14 @@ export function EstimateVisualization({
         className="mb-8"
         onMouseEnter={() => {
           setIsSection3Open(true);
-          // Only close Section 1 if Section 2 is open (to keep at least one section open)
-          if (isSection2Open) {
-            setIsSection1Open(false);
-          }
+          // Close both Section 1 and Section 2 - only one section (1-3) can be open at a time
+          setIsSection1Open(false);
+          setIsSection2Open(false);
         }}
         onMouseLeave={() => {
           setIsSection3Open(false);
-          // Ensure at least Section 1 or Section 2 is open
-          if (!isSection1Open && !isSection2Open) {
-            setIsSection1Open(true);
-          }
+          // When Section 3 closes, open Section 1 to ensure at least one section is open
+          setIsSection1Open(true);
         }}
       >
         {isSection3Open ? (
