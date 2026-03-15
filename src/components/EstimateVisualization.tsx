@@ -765,12 +765,24 @@ export function EstimateVisualization({
           <div 
             className="transition-all duration-500 ease-in-out overflow-hidden"
             style={{
-              maxHeight: isSection1Open ? '5000px' : '120px',
+              maxHeight: isSection1Open ? '5000px' : '160px',
               opacity: isSection1Open ? 1 : 1,
             }}
           >
           {isSection1Open ? (
-            <>
+            <div
+              onMouseLeave={(e) => {
+                // Check if mouse is moving below Section 1 (towards Section 2)
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseY = e.clientY;
+                // If mouse is below the section, open Section 2
+                if (mouseY > rect.bottom) {
+                  setIsSection2Open(true);
+                  setIsSection1Open(false);
+                  setIsSection3Open(false);
+                }
+              }}
+            >
               {/* Header */}
               <div className="mb-6">
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
@@ -919,7 +931,7 @@ export function EstimateVisualization({
           </p>
         </div>
               </div>
-            </>
+            </div>
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
@@ -929,9 +941,9 @@ export function EstimateVisualization({
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
-                minHeight: '120px',
-                paddingTop: '24px',
-                paddingBottom: '24px',
+                minHeight: '160px',
+                paddingTop: '48px',
+                paddingBottom: '48px',
                 paddingLeft: '20px',
                 paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
@@ -982,7 +994,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection2Open ? '5000px' : '140px',
+            maxHeight: isSection2Open ? '5000px' : '160px',
             opacity: isSection2Open ? 1 : 1,
           }}
         >
@@ -1241,9 +1253,9 @@ export function EstimateVisualization({
           <div 
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
-              minHeight: '140px',
-              paddingTop: '40px',
-              paddingBottom: '40px',
+              minHeight: '160px',
+              paddingTop: '48px',
+              paddingBottom: '48px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
@@ -1370,7 +1382,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection3Open ? '5000px' : '100px',
+            maxHeight: isSection3Open ? '5000px' : '160px',
             opacity: isSection3Open ? 1 : 1,
           }}
         >
@@ -1477,9 +1489,9 @@ export function EstimateVisualization({
           <div 
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
-              minHeight: '100px',
-              paddingTop: '28px',
-              paddingBottom: '28px',
+              minHeight: '160px',
+              paddingTop: '48px',
+              paddingBottom: '48px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection3Open ? 0 : 1,
