@@ -264,6 +264,14 @@ export function EstimateVisualization({
     }
   }, [tasks]); // Reset when tasks change (new estimate generated)
   
+  // Ensure at least one of Sections 1-3 is always open (Section 4 is always open)
+  useEffect(() => {
+    // If all three sections are closed, open Section 1
+    if (!isSection1Open && !isSection2Open && !isSection3Open) {
+      setIsSection1Open(true);
+    }
+  }, [isSection1Open, isSection2Open, isSection3Open]);
+  
   // Tab cycling state
   const [tabCycleIndex, setTabCycleIndex] = useState(0); // 0 = Section 2, 1 = Section 3, 2 = Section 1
   
@@ -834,12 +842,17 @@ export function EstimateVisualization({
               }, 50);
             }}
             onMouseLeave={() => {
-              // Only close if not moving to another section (handled by their onMouseEnter)
+              // Only close if moving to another section (handled by their onMouseEnter)
               // Add a small delay to allow smooth transition to next section
+              // BUT ensure at least one section (1-3) stays open - don't close if others are closed
               setTimeout(() => {
-                if (!isSection2Open && !isSection3Open) {
+                // Only close Section 1 if at least one other section (2 or 3) is open
+                // This ensures at least one of Sections 1-3 is always open (Section 4 is always open)
+                if (isSection2Open || isSection3Open) {
+                  // Another section is open, so it's safe to close Section 1
                   setIsSection1Open(false);
                 }
+                // If no other section is open, keep Section 1 open (don't close it)
               }, 150);
             }}
           >
@@ -1062,7 +1075,7 @@ export function EstimateVisualization({
               setTimeout(() => {
                 if (!isSection1Open && !isSection3Open) {
                   setIsSection2Open(false);
-                  // When Section 2 closes, open Section 1
+                  // When Section 2 closes, ensure Section 1 opens (at least one section must be open)
                   setIsSection1Open(true);
                 }
               }, 150);
@@ -1464,7 +1477,7 @@ export function EstimateVisualization({
               setTimeout(() => {
                 if (!isSection1Open && !isSection2Open) {
                   setIsSection3Open(false);
-                  // When Section 3 closes, open Section 1
+                  // When Section 3 closes, ensure Section 1 opens (at least one section must be open)
                   setIsSection1Open(true);
                 }
               }, 150);
