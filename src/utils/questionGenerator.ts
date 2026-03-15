@@ -177,7 +177,26 @@ export function generatePersonalizedQuestions(
     questions.push(techQuestion);
   }
 
-  // Question 9: Budget & Investment Clarity
+  // Question 9: How will you measure success? (Before budget question)
+  const successMetricsQuestion: Question = {
+    id: 'success-metrics',
+    text: `How will you measure success for "${projectName}"?`,
+    type: 'select',
+    options: [
+      'User engagement metrics',
+      'Conversion rates',
+      'Brand recognition',
+      'Time to market',
+      'Client satisfaction',
+      'Revenue growth',
+      'Multiple metrics',
+    ],
+    category: 'goals',
+    weight: 0.8,
+  };
+  questions.push(successMetricsQuestion);
+
+  // Question 10: Budget & Investment Clarity (Last question - after measure success)
   const budgetQuestion: Question = {
     id: 'investment-clarity',
     text: `To ensure "${projectName}" delivers maximum ROI, what's your investment range? This helps us scope the right solution.`,
