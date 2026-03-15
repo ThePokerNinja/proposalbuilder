@@ -2022,11 +2022,11 @@ export function ProgressiveCard({
         {/* Left Column: Cards and Button - Right-aligned to horizontal center */}
         {/* 
           Layout breakdown (percentage-based):
-          - Left spacing: 5% (from 0% to left column start)
+          - Left spacing: 21% (from 0% to left column start)
           - Left column: 30% width
-          - Gap: 1.5% total (0.75% on each side of center)
+          - Gap: 2% total (1% on each side of center)
           - Estimate: 46.8% width
-          - Right spacing: 5% (from estimate end to 100%)
+          - Right spacing: 2.2% (from estimate end to 100%)
         */}
         <div 
           className={estimate ? 'flex-shrink-0 flex flex-col absolute' : 'w-full'}
@@ -2034,7 +2034,7 @@ export function ProgressiveCard({
             width: '30%',
             minWidth: '30%',
             maxWidth: '30%',
-            left: '5%', // Left edge at 5% (left spacing)
+            right: '51%', // Right edge at center (50%) + half gap (1%)
             top: 0
           } : {}}
         >
@@ -2418,7 +2418,7 @@ export function ProgressiveCard({
               width: '46.8%',
               minWidth: '46.8%',
               maxWidth: '46.8%',
-              left: '50.75%', // Left edge at center (50%) + half gap (0.75%)
+              left: '51%', // Left edge at center (50%) + half gap (1%)
               top: 0
             }}
           >
