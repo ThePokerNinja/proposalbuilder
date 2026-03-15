@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Task } from '../types';
 import { Calendar, CheckCircle2, Circle, Download, FileText, Plus, X, MoreVertical, Trash2, Edit2, GripVertical } from 'lucide-react';
@@ -243,50 +243,10 @@ export function EstimateVisualization({
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
-  // Track estimate view count for cycling through sections
-  const hasInitialized = useRef(false);
-  
-  // Determine which section should be open based on view count
-  // Pattern: view 0 = Section 2, view 1 = Section 3, view 2 = Section 1, then repeat
-  const getInitialSectionState = (count: number) => {
-    const pattern = count % 3;
-    return {
-      section1: pattern === 2, // Open on 3rd view (index 2)
-      section2: pattern === 0,  // Open on 1st view (index 0)
-      section3: pattern === 1,  // Open on 2nd view (index 1)
-    };
-  };
-
-  // Get initial view count from sessionStorage
-  const getViewCount = () => {
-    const stored = sessionStorage.getItem('estimateViewCount');
-    return stored ? parseInt(stored, 10) : 0;
-  };
-
-  // Initialize section states based on view count
-  const initialViewCount = getViewCount();
-  const initialSectionState = getInitialSectionState(initialViewCount);
-  
   // Section collapse/expand state
-  const [isSection1Open, setIsSection1Open] = useState(initialSectionState.section1);
-  const [isSection2Open, setIsSection2Open] = useState(initialSectionState.section2);
-  const [isSection3Open, setIsSection3Open] = useState(initialSectionState.section3);
-
-  // Increment view count when component first mounts (when estimate screen is shown)
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      const currentCount = getViewCount();
-      const newCount = currentCount + 1;
-      sessionStorage.setItem('estimateViewCount', newCount.toString());
-      
-      // Update section states based on new count
-      const newState = getInitialSectionState(newCount);
-      setIsSection1Open(newState.section1);
-      setIsSection2Open(newState.section2);
-      setIsSection3Open(newState.section3);
-    }
-  }, []); // Only run once on mount
+  const [isSection1Open, setIsSection1Open] = useState(true); // Default open
+  const [isSection2Open, setIsSection2Open] = useState(false); // Default closed
+  const [isSection3Open, setIsSection3Open] = useState(false); // Default closed
 
   // Generate initial summary, problem statement, and measures of success from answers + market research
   useEffect(() => {
