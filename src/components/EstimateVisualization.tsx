@@ -978,7 +978,7 @@ export function EstimateVisualization({
             <div 
               className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer hover:shadow-md flex items-center"
               style={{
-                backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
+                backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner2.gif')`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
