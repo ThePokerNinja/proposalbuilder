@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Task } from '../types';
 import { Calendar, CheckCircle2, Circle, Download, FileText, Plus, X, MoreVertical, Trash2, Edit2, GripVertical } from 'lucide-react';
@@ -243,10 +243,26 @@ export function EstimateVisualization({
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
-  // Section collapse/expand state - Start with Section 2 open
-  const [isSection1Open, setIsSection1Open] = useState(false); // Start closed
-  const [isSection2Open, setIsSection2Open] = useState(true); // Start open
+  // Section collapse/expand state - Start with Section 1 open
+  const [isSection1Open, setIsSection1Open] = useState(true); // Start open
+  const [isSection2Open, setIsSection2Open] = useState(false); // Start closed
   const [isSection3Open, setIsSection3Open] = useState(false); // Start closed
+
+  // Reset sections to default (Section 1 open) whenever estimate is regenerated
+  // Track tasks by their IDs to detect when a new estimate is generated
+  const prevTaskIdsRef = useRef<string>('');
+  useEffect(() => {
+    if (tasks && tasks.length > 0) {
+      const currentTaskIds = tasks.map(t => t.id).sort().join(',');
+      // If task IDs have changed, it's a new estimate - reset sections
+      if (currentTaskIds !== prevTaskIdsRef.current) {
+        setIsSection1Open(true);
+        setIsSection2Open(false);
+        setIsSection3Open(false);
+        prevTaskIdsRef.current = currentTaskIds;
+      }
+    }
+  }, [tasks]); // Reset when tasks change (new estimate generated)
   
   // Tab cycling state
   const [tabCycleIndex, setTabCycleIndex] = useState(0); // 0 = Section 2, 1 = Section 3, 2 = Section 1
