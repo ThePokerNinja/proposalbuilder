@@ -835,7 +835,7 @@ export function EstimateVisualization({
                 className="mb-6 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden" 
                 style={{
                   backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner2.gif')`,
-                  backgroundSize: 'cover',
+                  backgroundSize: '120%',
                   backgroundPosition: 'center center',
                   backgroundRepeat: 'no-repeat',
                   minHeight: '150px'
@@ -979,7 +979,7 @@ export function EstimateVisualization({
               className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer hover:shadow-md flex items-center"
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner2.gif')`,
-                backgroundSize: 'cover',
+                backgroundSize: '120%',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
                 minHeight: '50px',
