@@ -982,7 +982,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection2Open ? '5000px' : '80px',
+            maxHeight: isSection2Open ? '5000px' : '140px',
             opacity: isSection2Open ? 1 : 1,
           }}
         >
@@ -1241,9 +1241,9 @@ export function EstimateVisualization({
           <div 
             className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
-              minHeight: '100px',
-              paddingTop: '28px',
-              paddingBottom: '28px',
+              minHeight: '140px',
+              paddingTop: '40px',
+              paddingBottom: '40px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
