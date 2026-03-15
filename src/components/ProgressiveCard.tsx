@@ -75,6 +75,7 @@ export function ProgressiveCard({
   const [openDropdowns, setOpenDropdowns] = useState<Set<number>>(new Set());
   const selectRefs = useRef<{ [key: number]: HTMLSelectElement | null }>({});
   const stepRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const inputRefs = useRef<{ [key: number]: HTMLInputElement | HTMLTextAreaElement | null }>({});
   // Track collapsed rows (completed steps that are minimized)
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
   // Track hovered step (for temporary expansion)
@@ -83,10 +84,12 @@ export function ProgressiveCard({
   const [focusedInput, setFocusedInput] = useState<number | null>(null);
   // Track completion status for button
   const [allComplete, setAllComplete] = useState(false);
+  // Track if research step is completed and collapsed (to show questions card)
+  const [showQuestionsCard, setShowQuestionsCard] = useState(false);
   // Track timeouts for cleanup
   const timeoutRefs = useRef<Set<number>>(new Set());
   
-  const RESEARCH_STEP_INDEX = 5; // Step index for research (after 5 basic fields)
+  const RESEARCH_STEP_INDEX = 5; // Step index for research (after 5 context questions)
   
   // Helper to create timeout with cleanup tracking
   const createTimeout = (callback: () => void, delay: number): number => {
@@ -128,7 +131,33 @@ export function ProgressiveCard({
       const questionIndex = stepIndex - RESEARCH_STEP_INDEX - 1; // -1 for research step
       const question = questions[questionIndex];
       if (!question) return false;
+      
       const answer = answers.find(a => a.questionId === question.id);
+      
+      // For select questions, check both the answer state AND the select element's value directly
+      // This handles cases where onChange hasn't updated state yet
+      if (question.type === 'select') {
+        // First check the select element directly (most immediate) - this catches the value before state updates
+        const selectEl = selectRefs.current[stepIndex];
+        if (selectEl) {
+          const selectValue = selectEl.value;
+          // Check if select has a value that's not empty (empty string is the placeholder option)
+          if (selectValue && selectValue.trim() !== '') {
+            return true; // Select has a non-empty value (any selected option is valid)
+          }
+        }
+        // Then check the answer state (after state has updated)
+        const value = answer?.value;
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'string') {
+            // Make sure it's not empty
+            return value.trim() !== '';
+          }
+          return true; // Non-string values are considered complete
+        }
+        return false;
+      }
+      
       if (question.type === 'multi-select') {
         return Array.isArray(answer?.value) && answer.value.length > 0;
       }
@@ -164,20 +193,60 @@ export function ProgressiveCard({
       setCollapsedSteps(prev => new Set([...prev, stepToCollapse]));
     }
     
+    // If user is moving forward past research step AND research is complete AND questions are available, show the questions card
+    // CRITICAL: Only show when moving FROM research step (index 5) TO discovery questions (index 6+)
+    // This ensures the card only appears AFTER research is completed, not during context questions (0-4)
+    if (stepToCollapse === RESEARCH_STEP_INDEX && 
+        isStepComplete(RESEARCH_STEP_INDEX) && 
+        nextStep > RESEARCH_STEP_INDEX && 
+        questions.length > 0) {
+      // Show card only after we've moved past research step (research is now collapsed)
+      // Use a small delay to ensure state updates have propagated
+      createTimeout(() => {
+        setShowQuestionsCard(true);
+        // Make only the first question visible when the card appears (questions show progressively)
+        const firstQuestionStepIndex = RESEARCH_STEP_INDEX + 1; // First question is at index 6
+        setVisibleSteps(prev => {
+          if (!prev.has(firstQuestionStepIndex)) {
+            return new Set([...prev, firstQuestionStepIndex]);
+          }
+          return prev;
+        });
+      }, 100);
+    }
+    
     // Don't advance past the last step - stop at the last question
     if (nextStep < totalSteps) {
       // Update to next step after collapsing
       setCurrentStep(nextStep);
       setVisibleSteps(prev => new Set([...prev, nextStep]));
-    } else {
-      // We're at the last step - collapse it immediately and all other completed steps
-      // First, clear currentStep so the step can be collapsed (isCollapsed requires !isActive)
-      setCurrentStep(-1);
       
-      // Then immediately collapse the current step
+      // Auto-focus the next input field
+      createTimeout(() => {
+        // Check if it's a select field
+        const selectEl = selectRefs.current[nextStep];
+        if (selectEl) {
+          selectEl.focus();
+        } else {
+          // Check if it's a text input or textarea
+          const inputEl = inputRefs.current[nextStep];
+          if (inputEl) {
+            inputEl.focus();
+          }
+        }
+      }, 100);
+    } else {
+      // We're at the last step - collapse it but keep currentStep on the last question
+      // This ensures the questions card stays visible
+      // Don't set currentStep to -1 here, keep it on the last question so the card remains visible
+      
+      // Collapse the current step
       if (isStepComplete(stepToCollapse)) {
         setCollapsedSteps(prev => new Set([...prev, stepToCollapse]));
       }
+      
+      // Keep currentStep on the last question (don't reset to -1)
+      // This ensures the questions card stays visible and the user can still interact with the last question
       
       // Then collapse all other completed steps after a brief delay to ensure state has updated
       createTimeout(() => {
@@ -287,8 +356,16 @@ export function ProgressiveCard({
   
   // Immediately collapse a completed step
   const collapseStepImmediately = (stepIndex: number, forceCollapse: boolean = false) => {
-    // If forceCollapse is true, collapse even if it's the current step (used when moving to next)
-    if (isStepComplete(stepIndex) && (forceCollapse || stepIndex !== currentStep)) {
+    // If forceCollapse is true, collapse immediately without checking completion (used when moving to next)
+    if (forceCollapse) {
+      setCollapsedSteps(prev => {
+        if (!prev.has(stepIndex)) {
+          return new Set([...prev, stepIndex]);
+        }
+        return prev;
+      });
+    } else if (isStepComplete(stepIndex) && stepIndex !== currentStep) {
+      // Only check completion if not forcing collapse
       setCollapsedSteps(prev => {
         if (!prev.has(stepIndex)) {
           return new Set([...prev, stepIndex]);
@@ -297,6 +374,64 @@ export function ProgressiveCard({
       });
     }
   };
+  
+  // Check if user has moved past research step AND questions are available
+  // Only show questions card when explicitly moving past research in handleNext
+  // This useEffect only hides it if conditions aren't met (safety check)
+  // IMPORTANT: Don't hide the card if estimate exists (user has completed everything)
+  useEffect(() => {
+    // If estimate exists, ensure the questions card stays visible (user has completed everything)
+    // This is CRITICAL - when estimate exists, we MUST keep the cards visible
+    if (estimate) {
+      // Always show questions card when estimate exists (if questions exist)
+      if (questions.length > 0) {
+        setShowQuestionsCard(true);
+      }
+      // Also ensure all steps are visible so they can be rendered (even if collapsed)
+      setVisibleSteps(prev => {
+        const newSet = new Set(prev);
+        // Add all basic steps
+        BASIC_STEPS.forEach((_, idx) => {
+          newSet.add(idx);
+        });
+        // Add research step
+        newSet.add(RESEARCH_STEP_INDEX);
+        // Add all question steps
+        questions.forEach((_, idx) => {
+          const stepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+          newSet.add(stepIndex);
+        });
+        return newSet;
+      });
+      // Ensure all steps are collapsed so they show their collapsed view
+      setCollapsedSteps(prev => {
+        const newSet = new Set(prev);
+        // Add all basic steps
+        BASIC_STEPS.forEach((_, idx) => {
+          newSet.add(idx);
+        });
+        // Add research step
+        newSet.add(RESEARCH_STEP_INDEX);
+        // Add all question steps
+        questions.forEach((_, idx) => {
+          const stepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+          newSet.add(stepIndex);
+        });
+        return newSet;
+      });
+      return; // Don't hide the card when estimate is shown
+    }
+    
+    const researchComplete = isStepComplete(RESEARCH_STEP_INDEX);
+    const researchCollapsed = collapsedSteps.has(RESEARCH_STEP_INDEX);
+    const hasMovedPastResearch = currentStep > RESEARCH_STEP_INDEX;
+    const questionsAvailable = questions.length > 0;
+    
+    // Hide card if ANY condition isn't met (safety check - don't auto-show here)
+    if (!researchComplete || !researchCollapsed || !hasMovedPastResearch || !questionsAvailable) {
+      setShowQuestionsCard(false);
+    }
+  }, [collapsedSteps, currentStep, questions.length, marketResearch, estimate, questions]); // Dependencies for visibility logic
   
   // Handle voice updates - open dropdowns when values come from voice
   useEffect(() => {
@@ -488,7 +623,6 @@ export function ProgressiveCard({
       // Check questions - also check select elements directly
       const questionsComplete = questions.every((q, i) => {
         const stepIndex = RESEARCH_STEP_INDEX + 1 + i;
-        const answer = answers.find(a => a.questionId === q.id);
         
         // For select questions, also check the select element's value directly
         if (q.type === 'select') {
@@ -694,9 +828,22 @@ export function ProgressiveCard({
       // This handles cases where onChange hasn't updated state yet
       if (q.type === 'select') {
         const selectEl = selectRefs.current[stepIndex];
-        if (selectEl && selectEl.value && selectEl.value.trim() !== '') {
-          return true; // Select has a value
+        if (selectEl) {
+          const selectValue = selectEl.value;
+          // Check if select has a value that's not empty (empty string is the placeholder option)
+          if (selectValue && selectValue.trim() !== '') {
+            return true; // Select has a non-empty value (any selected option is valid)
+          }
         }
+        // Also check answer state
+        const answer = answers.find(a => a.questionId === q.id);
+        if (answer?.value !== undefined && answer.value !== null) {
+          if (typeof answer.value === 'string') {
+            return answer.value.trim() !== '';
+          }
+          return true;
+        }
+        return false;
       }
       
       // Otherwise use normal completion check
@@ -732,8 +879,9 @@ export function ProgressiveCard({
   
   // Render a basic field step
   const renderBasicField = (stepIndex: number, step: typeof BASIC_STEPS[0]) => {
+    // If estimate exists, always show all steps (they'll be collapsed)
     // First step (index 0) should always be visible, even when currentStep is -1
-    if (!visibleSteps.has(stepIndex) && stepIndex !== 0) return null;
+    if (!estimate && !visibleSteps.has(stepIndex) && stepIndex !== 0) return null;
     
     const isActive = currentStep === stepIndex;
     const isComplete = isStepComplete(stepIndex);
@@ -798,6 +946,7 @@ export function ProgressiveCard({
         {step.type === 'text' && (
           <>
             <input
+              ref={(el) => { inputRefs.current[stepIndex] = el; }}
               type="text"
               value={step.value}
               onChange={(e) => handleFieldChange(stepIndex, e.target.value)}
@@ -1055,6 +1204,7 @@ export function ProgressiveCard({
         {step.type === 'textarea' && (
           <>
             <textarea
+              ref={(el) => { inputRefs.current[stepIndex] = el; }}
               value={step.value}
               onChange={(e) => {
                 handleFieldChange(stepIndex, e.target.value);
@@ -1123,7 +1273,8 @@ export function ProgressiveCard({
   
   // Render research step
   const renderResearchStep = () => {
-    if (!visibleSteps.has(RESEARCH_STEP_INDEX)) return null;
+    // If estimate exists, always show research step (it'll be collapsed)
+    if (!estimate && !visibleSteps.has(RESEARCH_STEP_INDEX)) return null;
     
     const isActive = currentStep === RESEARCH_STEP_INDEX;
     const isComplete = isStepComplete(RESEARCH_STEP_INDEX);
@@ -1224,7 +1375,7 @@ export function ProgressiveCard({
       >
         <div className="space-y-4">
           <div>
-            <p className="text-sm font-semibold text-gray-900 mb-1">Step 2 · Strategic Market Review</p>
+            <p className="text-sm font-semibold text-gray-900 mb-1">Research · Strategic Market Review</p>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Market fit & competitive evaluation</h3>
             <p className="text-sm text-gray-600 mb-4">
               Using your project name and summary, we infer the most relevant market, scan similar initiatives,
@@ -1339,7 +1490,10 @@ export function ProgressiveCard({
   // Render a discovery question
   const renderQuestion = (questionIndex: number, question: Question) => {
     const stepIndex = RESEARCH_STEP_INDEX + 1 + questionIndex; // +1 for research step
-    if (!visibleSteps.has(stepIndex)) return null;
+    // Show questions if:
+    // 1. Estimate exists (they'll be collapsed), OR
+    // 2. This specific question is in visibleSteps (progressive display - one at a time)
+    if (!estimate && !visibleSteps.has(stepIndex)) return null;
     
     const isActive = currentStep === stepIndex;
     const answer = answers.find(a => a.questionId === question.id);
@@ -1390,6 +1544,8 @@ export function ProgressiveCard({
             ? 'opacity-100 translate-y-0 scale-100'
             : isComplete
             ? 'opacity-60 translate-y-0 scale-[0.98]'
+            : visibleSteps.has(stepIndex)
+            ? 'opacity-100 translate-y-0 scale-100' // Show question if it's in visibleSteps
             : 'opacity-0 -translate-y-4 scale-95 pointer-events-none h-0 overflow-hidden'
         }`}
         style={{
@@ -1405,6 +1561,7 @@ export function ProgressiveCard({
         {question.type === 'text' && (
           <>
             <input
+              ref={(el) => { inputRefs.current[stepIndex] = el; }}
               type="text"
               value={(answer?.value as string) || ''}
               onChange={(e) => handleQuestionAnswer(question, e.target.value)}
@@ -1430,10 +1587,23 @@ export function ProgressiveCard({
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && isStepComplete(stepIndex)) {
+                if (e.key === 'Enter') {
                   e.preventDefault();
-                  collapseStepImmediately(stepIndex, true);
-                  handleNext();
+                  const currentValue = e.currentTarget.value;
+                  // Ensure answer is saved first if it has changed
+                  if (currentValue && (!answer || answer.value !== currentValue)) {
+                    handleQuestionAnswer(question, currentValue);
+                  }
+                  // Check if complete (using current input value, not just state)
+                  if (currentValue && currentValue.trim() !== '') {
+                    // Force completion check update
+                    createTimeout(() => {
+                      const isComplete = allStepsComplete();
+                      setAllComplete(isComplete);
+                    }, 100);
+                    collapseStepImmediately(stepIndex, true);
+                    handleNext();
+                  }
                 }
               }}
               placeholder={question.text}
@@ -1511,23 +1681,27 @@ export function ProgressiveCard({
                     data-question-id={question.id}
                     onChange={(e) => {
                       const newValue = e.target.value;
+                      // Save answer immediately
                       handleQuestionAnswer(question, newValue);
-                      // If this completes the question, collapse it immediately after state update
-                      if (newValue) {
+                      // Force completion check update after state settles
+                      if (newValue && newValue.trim() !== '') {
+                        // Immediately check if this step is complete
+                        const stepComplete = isStepComplete(stepIndex);
+                        if (stepComplete) {
+                          setCollapsedSteps(prev => {
+                            if (!prev.has(stepIndex)) {
+                              return new Set([...prev, stepIndex]);
+                            }
+                            return prev;
+                          });
+                        }
+                        // Then check all steps completion - do this immediately and with delay
+                        const immediateComplete = allStepsComplete();
+                        setAllComplete(immediateComplete);
                         createTimeout(() => {
-                          // Force completion check update
                           const isComplete = allStepsComplete();
                           setAllComplete(isComplete);
-                          
-                          if (isStepComplete(stepIndex)) {
-                            setCollapsedSteps(prev => {
-                              if (!prev.has(stepIndex)) {
-                                return new Set([...prev, stepIndex]);
-                              }
-                              return prev;
-                            });
-                          }
-                        }, 150);
+                        }, 200); // Also check after delay to catch any state updates
                       }
                     }}
                     onKeyDown={(e) => {
@@ -1788,48 +1962,173 @@ export function ProgressiveCard({
             background-position: 20px 20px;
           }
         }
+        
+        /* Slide Down Animation for Generate Estimate Button */
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-32px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        /* Slide Left Animation for Cards - moves 200px left */
+        @keyframes slideLeft {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-200px);
+          }
+        }
+        
+        /* Slide In Right Animation for Estimate */
+        @keyframes slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(40px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
       `}</style>
       
-      <div className="relative group">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
-        <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
-          {/* Progress Bar - flush to top */}
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gray-200/50 overflow-hidden rounded-t-2xl">
-            <div 
-              className="h-full bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 transition-all duration-500 ease-out"
-              style={{ width: `${calculateProgress()}%` }}
-            />
-          </div>
-          <div className="space-y-3 min-w-0 w-full flex flex-col">
+      {/* Container: Two-column layout when estimate exists, single column otherwise */}
+      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap gap-8 items-center justify-start' : ''}`}>
+        {/* Left Column: Cards and Button - 30% width with 100px left padding when estimate appears */}
+        <div 
+          className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
+          style={estimate ? { 
+            width: 'calc(30% - 100px)',
+            minWidth: 'calc(30% - 100px)',
+            maxWidth: 'calc(30% - 100px)',
+            paddingLeft: '100px',
+            boxSizing: 'border-box'
+          } : {}}
+        >
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+            <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
+          {/* Progress Bar - flush to top - only show after first question is answered */}
+          {(() => {
+            // Only show progress bar if the first field (jobTitle) is completed
+            // This ensures it doesn't show on initial load when only default values exist
+            const firstFieldComplete = isStepComplete(0); // jobTitle is index 0
+            if (!firstFieldComplete) return null;
+            
+            // Use completion state to show 100% when all steps are complete
+            const progress = calculateProgress();
+            const displayProgress = allComplete ? 100 : progress;
+            
+            return (
+              <div className="absolute top-0 left-0 right-0 h-2 bg-gray-200/50 overflow-hidden rounded-t-2xl z-10">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 transition-all duration-500 ease-out"
+                  style={{ width: `${displayProgress}%` }}
+                />
+              </div>
+            );
+          })()}
+          <div className="space-y-3 min-w-0 w-full flex flex-col relative z-0">
             {/* Basic fields */}
             {BASIC_STEPS.map((step, idx) => renderBasicField(idx, step))}
             
             {/* Research step */}
             {renderResearchStep()}
             
-            {/* Discovery questions */}
-            {questions.map((question, idx) => renderQuestion(idx, question))}
+            {/* Discovery questions - removed from main card, now in separate card below */}
           </div>
-        </div>
+            </div>
+          </div>
+        
+          {/* Questions Card - appears below main card after research is completed and user has moved past it */}
+          {/* CRITICAL: If estimate exists, ALWAYS show the card - no conditions */}
+          {(() => {
+            // If estimate exists, ALWAYS show the questions card (user has completed everything)
+            // This is the simplest condition - if estimate exists and questions exist, show it
+            if (estimate && questions.length > 0) {
+              return true;
+            }
+            
+            // Otherwise, use strict conditions (when estimate doesn't exist yet)
+            const researchComplete = isStepComplete(RESEARCH_STEP_INDEX);
+            const researchCollapsed = collapsedSteps.has(RESEARCH_STEP_INDEX);
+            const hasMovedPastResearch = currentStep > RESEARCH_STEP_INDEX;
+            const isOnDiscoveryQuestion = currentStep >= RESEARCH_STEP_INDEX + 1;
+            const hasQuestions = questions.length > 0;
+            
+            if (!hasMovedPastResearch && !isOnDiscoveryQuestion) {
+              const allQuestionsComplete = questions.every((_, idx) => {
+                const qStepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+                return isStepComplete(qStepIndex);
+              });
+              if (!allQuestionsComplete) return false;
+            }
+            
+            // CRITICAL: Once questions card is shown, keep it visible if any questions are complete
+            // This prevents the card from disappearing when user is on last question
+            const hasAnyCompleteQuestions = questions.some((_, idx) => {
+              const qStepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+              return isStepComplete(qStepIndex);
+            });
+            
+            // Show if: card was shown AND (has moved past research OR has any complete questions)
+            const shouldShowCard = showQuestionsCard && hasQuestions && researchComplete && researchCollapsed && 
+              (hasMovedPastResearch || isOnDiscoveryQuestion || hasAnyCompleteQuestions);
+            
+            return shouldShowCard;
+          })() && questions.length > 0 && (
+            <div 
+              className="relative group mt-6"
+              style={{ 
+                animation: 'slideDown 0.7s ease-out forwards'
+              }}
+            >
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+              <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
+                <div className="space-y-3 min-w-0 w-full flex flex-col relative z-0">
+                  {/* Discovery questions */}
+                  {questions.length > 0 && questions.map((question, idx) => renderQuestion(idx, question))}
+                </div>
+              </div>
+            </div>
+          )}
         
         {/* Generate Estimate Button - Separate container outside the card */}
         {!estimate && (() => {
-              // Show button after at least one question is answered
-              const hasAtLeastOneAnswer = BASIC_STEPS.some((_, i) => isStepComplete(i)) || 
-                                         isStepComplete(RESEARCH_STEP_INDEX) || 
-                                         answers.length > 0;
-              
-              if (!hasAtLeastOneAnswer) return null;
-              
-              // Use state variable for completion (updated in useEffect)
+              // Check completion directly (more reliable than state)
+              const isComplete = allStepsComplete();
               const progress = calculateProgress();
-              const isComplete = allComplete;
+              
+              // Show button if all steps are complete
+              // Also check if first field is complete as a fallback (for early visibility)
+              const firstFieldComplete = isStepComplete(0); // jobTitle is index 0
+              
+              // Show button if:
+              // 1. All steps are complete, OR
+              // 2. First field is complete (regardless of collapse state - show early)
+              // This ensures button appears early (after first question) and stays visible when all complete
+              const shouldShow = isComplete || firstFieldComplete;
+              if (!shouldShow) {
+                return null;
+              }
               
               // When complete, progress should be 100%
               const displayProgress = isComplete ? 100 : progress;
               
               return (
-                <div className="transition-all duration-500 ease-out opacity-100 translate-y-0 scale-100" style={{ paddingTop: '24px', marginTop: '24px' }}>
+                <div 
+                  style={{ 
+                    paddingTop: '12px', 
+                    marginTop: '12px',
+                    animation: 'slideDown 0.7s ease-out forwards'
+                  }}
+                >
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -1844,6 +2143,17 @@ export function ProgressiveCard({
                       
                       const newEstimate = onGenerateEstimate();
                       if (newEstimate && setEstimate) {
+                        // Ensure questions card stays visible when estimate is generated
+                        setShowQuestionsCard(true);
+                        // Ensure all questions are visible
+                        setVisibleSteps(prev => {
+                          const newSet = new Set(prev);
+                          questions.forEach((_, idx) => {
+                            const stepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+                            newSet.add(stepIndex);
+                          });
+                          return newSet;
+                        });
                         setEstimate(newEstimate);
                       }
                     }}
@@ -1966,12 +2276,21 @@ export function ProgressiveCard({
                 </div>
               );
             })()}
-      </div>
-      
-      {/* Estimate Visualization - shown below card */}
-      {estimate && setEstimate && (
-        <div className="mt-8 animate-slide-up">
-          <EstimateVisualization
+        </div>
+        
+        {/* Right Column: Estimate Visualization - 30% width */}
+        {estimate && setEstimate ? (
+          <div 
+            className="flex-shrink-0"
+            data-estimate-section
+            style={{ 
+              animation: 'slideInRight 0.7s ease-out forwards',
+              width: '30%',
+              minWidth: '30%',
+              maxWidth: '30%'
+            }}
+          >
+            <EstimateVisualization
             tasks={estimate.tasks}
             timeline={estimate.timeline}
             totalHours={estimate.totalHours}
@@ -1997,9 +2316,10 @@ export function ProgressiveCard({
             projectSummary={projectContext}
             answers={answers}
             marketResearch={marketResearch}
-          />
-        </div>
-      )}
+            />
+          </div>
+        ) : null}
+      </div>
     </>
   );
 }

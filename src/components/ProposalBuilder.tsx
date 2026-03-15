@@ -18,6 +18,7 @@ import { runMarketResearch, MarketResearchResult } from '../utils/marketResearch
 import { generatePersonalizedQuestions } from '../utils/questionGenerator';
 import { VoiceInput } from './VoiceInput';
 import { ProgressiveCard } from './ProgressiveCard';
+import { VersionManager } from './VersionManager';
 import { ArrowLeft, ArrowRight, Sparkles, X, AlertTriangle } from 'lucide-react';
 
 const TAGLINE_MESSAGES = [
@@ -29,8 +30,8 @@ export function ProposalBuilder() {
   const [projectName, setProjectName] = useState('');
   const [projectContext, setProjectContext] = useState('');
   const [jobTitle, setJobTitle] = useState('');
-  const [projectCategory, setProjectCategory] = useState('');
-  const [projectPriority, setProjectPriority] = useState<'urgent' | 'within-month' | 'no-rush' | ''>('');
+  const [projectCategory, setProjectCategory] = useState('branding package');
+  const [projectPriority, setProjectPriority] = useState<'urgent' | 'within-month' | 'no-rush'>('within-month');
   const [showSummaryField, setShowSummaryField] = useState(false);
   // Flow: 'intro' -> 'research' -> 'questions' (estimate handled separately)
   const [flowStep, setFlowStep] = useState<'intro' | 'research' | 'questions'>('intro');
@@ -38,32 +39,22 @@ export function ProposalBuilder() {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [showEstimate, setShowEstimate] = useState(false);
-  const [projectAnalysis, setProjectAnalysis] = useState<ReturnType<typeof analyzeProjectInput> | null>(null);
-  const [predictions, setPredictions] = useState<Partial<Record<string, string | string[]>>>({});
+  const [_projectAnalysis, setProjectAnalysis] = useState<ReturnType<typeof analyzeProjectInput> | null>(null);
+  const [_predictions, setPredictions] = useState<Partial<Record<string, string | string[]>>>({});
   const [personalizedQuestions, setPersonalizedQuestions] = useState<Question[]>([]);
   const [showResetModal, setShowResetModal] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  // Kept for revert - suppress unused warnings
-  void projectAnalysis;
-  void predictions;
-  void isAnalyzing;
+  const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [marketResearch, setMarketResearch] = useState<MarketResearchResult | null>(null);
+  const [agentTranscriptHistory, setAgentTranscriptHistory] = useState<string[]>([]);
   const analysisTimeoutRef = useRef<number | null>(null);
   const [taglineMessageIndex, setTaglineMessageIndex] = useState(0);
   const [typedTagline, setTypedTagline] = useState('');
-  const [agentTranscript, setAgentTranscript] = useState('');
-  const [agentTranscriptHistory, setAgentTranscriptHistory] = useState<string[]>([]);
 
   // Generate personalized questions when project name/summary is available
   // Update questions dynamically as answers come in to filter irrelevant ones
   useEffect(() => {
-    if (projectName.trim() && projectContext.trim()) {
-      // Generate questions once we have both name and summary
+    if (projectName.trim() || projectContext.trim()) {
       const questions = generatePersonalizedQuestions(projectName, projectContext, answers);
-      setPersonalizedQuestions(questions);
-    } else if (projectName.trim() && !projectContext.trim()) {
-      // If only name is filled, generate basic questions
-      const questions = generatePersonalizedQuestions(projectName, '', answers);
       setPersonalizedQuestions(questions);
     }
   }, [projectName, projectContext, answers]);
@@ -76,7 +67,7 @@ export function ProposalBuilder() {
 
   // High-level context we can stream to the voice agent so it always knows
   // where the user is in the flow and what the current proposal looks like.
-  const agentContext = {
+  const agentContext = useMemo(() => ({
     flowStep,
     pageTitle:
       flowStep === 'intro'
@@ -108,35 +99,26 @@ export function ProposalBuilder() {
         }
       : null,
     showEstimate,
-  };
+  }), [flowStep, projectName, projectContext, jobTitle, projectCategory, projectPriority, questions.length, currentQuestionIndex, currentQuestion, answers, estimate, showEstimate]);
 
   // Sticky top bar with voice agent + animated tagline
   const TopBar = () => (
     <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-auto">
-      <div className="max-w-5xl mx-auto flex flex-col items-center gap-1.5">
+      <div className="max-w-5xl mx-auto flex flex-col items-center gap-3">
         <VoiceInput
           onFormDataUpdate={handleVoiceFormDataUpdate}
           onTranscript={(text) => {
-            const clean = text.trim();
-            console.log('Agent transcript for tagline:', clean);
-            // Limit length so it fits nicely in the pill
-            const truncated = clean.length > 140 ? `${clean.slice(0, 137)}...` : clean;
-            setAgentTranscript(truncated);
-
-            // Append to transcript history for real-time view
-            if (clean) {
-              setAgentTranscriptHistory((prev) => [...prev, clean]);
-            }
+            setAgentTranscriptHistory(prev => [...prev, text]);
           }}
-          agentContext={agentContext}
           onError={(error) => {
             console.error('Voice input error:', error);
           }}
+          agentContext={agentContext}
         />
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide min-w-[260px] justify-center -mt-[50px]">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide">
           <Sparkles className="w-3 h-3 text-[#FFD700]" />
           <span className="whitespace-nowrap">
-            {agentTranscript || typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
+            {typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
           </span>
         </span>
       </div>
@@ -219,8 +201,8 @@ export function ProposalBuilder() {
     // No auto-advance - user must click "Next" button to proceed
   };
 
-  // Kept for revert
-  const handleStartQuestions = () => {
+  // Kept for revert - unused in current flow
+  const _handleStartQuestions = () => {
     if (!projectName.trim()) {
       alert('Please enter a project name');
       return;
@@ -258,7 +240,7 @@ export function ProposalBuilder() {
       // Don't block the flow on errors
     }
   };
-  void handleStartQuestions; // Kept for revert
+  void _handleStartQuestions; // Kept for revert
 
   const handleNext = () => {
     if (currentQuestionIndex < questions.length - 1) {
@@ -274,16 +256,10 @@ export function ProposalBuilder() {
     }
   };
 
-  const generateEstimate = () => {
-    // Generate personalized questions if not already generated
-    if (personalizedQuestions.length === 0 && projectName.trim()) {
-      const questions = generatePersonalizedQuestions(projectName, projectContext, answers);
-      setPersonalizedQuestions(questions);
-    }
-    
+  const generateEstimate = (): Estimate | null => {
     const newEstimate = createEstimate(answers, projectName, projectContext);
     setEstimate(newEstimate);
-    // Don't set showEstimate - we'll render inline instead
+    // Don't set showEstimate - let ProgressiveCard handle the layout with both cards and estimate
     
     // Learn from this project to improve future predictions
     if (projectName.trim()) {
@@ -336,8 +312,8 @@ export function ProposalBuilder() {
     }
   };
 
-  // Check if form is complete (all required fields filled) - kept for revert
-  const isFormComplete = useMemo(() => {
+  // Check if form is complete (all required fields filled) - Kept for revert
+  const _isFormComplete = useMemo(() => {
     return !!(
       jobTitle.trim() &&
       projectCategory.trim() &&
@@ -346,7 +322,7 @@ export function ProposalBuilder() {
       projectContext.trim()
     );
   }, [jobTitle, projectCategory, projectPriority, projectName, projectContext]);
-  void isFormComplete; // Kept for revert
+  void _isFormComplete; // Kept for revert
 
   // Handle voice input form data updates
   const handleVoiceFormDataUpdate = (data: {
@@ -455,6 +431,27 @@ export function ProposalBuilder() {
     }
   }, [flowStep, projectName, projectContext, projectCategory, projectPriority, jobTitle]);
 
+  // Listen for estimate shortcut button click - works from anywhere in the process
+  useEffect(() => {
+    const handleShowEstimate = () => {
+      // Always generate estimate if it doesn't exist (works even with empty/minimal data)
+      if (!estimate) {
+        // Generate estimate with current answers (createEstimate always returns an estimate)
+        const newEstimate = createEstimate(answers, projectName || 'Project', projectContext || '');
+        setEstimate(newEstimate);
+      }
+      
+      // Always navigate to estimate screen, regardless of current flowStep
+      // The showEstimate check happens before flowStep checks in the render logic
+      setShowEstimate(true);
+    };
+
+    window.addEventListener('proposalbuilder:show-estimate', handleShowEstimate);
+    return () => {
+      window.removeEventListener('proposalbuilder:show-estimate', handleShowEstimate);
+    };
+  }, [estimate, answers, projectName, projectContext]);
+
   // Typewriter effect for tagline, cycling between two messages
   useEffect(() => {
     const fullText = TAGLINE_MESSAGES[taglineMessageIndex];
@@ -477,75 +474,13 @@ export function ProposalBuilder() {
     return () => window.clearTimeout(pauseId);
   }, [typedTagline, taglineMessageIndex]);
 
-  // Estimate/Dashboard screen (after questions are answered) - check FIRST before other flow steps
-  if (showEstimate && estimate) {
-    return (
-      <div className="min-h-screen portfolio-bg pb-12 px-4">
-        <TopBar />
-        <div className="max-w-6xl mx-auto pt-10">
-          {/* Top actions row: Back, Start over, Export */}
-          <div className="mb-6 flex items-center justify-between">
-            <button
-              onClick={handleBackToQuestions}
-              className="flex items-center text-white/90 hover:text-white transition-colors font-medium"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Questions
-            </button>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setFlowStep('intro');
-                  setCurrentQuestionIndex(0);
-                  setAnswers([]);
-                  setEstimate(null);
-                  setShowEstimate(false);
-                  setProjectAnalysis(null);
-                  setPredictions({});
-                  setPersonalizedQuestions([]);
-                }}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium transition-colors"
-              >
-                Start Over
-              </button>
-            </div>
-          </div>
-          <EstimateVisualization
-            tasks={estimate.tasks}
-            timeline={estimate.timeline}
-            totalHours={estimate.totalHours}
-            onTaskMultiplierChange={handleTaskMultiplierChange}
-            onTasksChange={(updatedTasks) => {
-              // Update estimate with new task selections
-              const newTotalHours = updatedTasks
-                .filter((t) => t.selected !== false)
-                .reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
-              
-              // Recalculate timeline based on new total hours
-              const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
-              const timelineWeeks = calculateTimeline(newTotalHours, timelineAnswer?.value as string | undefined);
-              
-              setEstimate({
-                ...estimate,
-                tasks: updatedTasks,
-                totalHours: newTotalHours,
-                timeline: timelineWeeks,
-              });
-            }}
-            projectName={projectName}
-            projectSummary={projectContext}
-            answers={answers}
-            marketResearch={marketResearch}
-          />
-        </div>
-      </div>
-    );
-  }
+  // REMOVED: Separate estimate screen - ProgressiveCard now handles showing both cards and estimate together in a two-column layout
 
   // Toggle tagline text every 4 seconds
   // Project setup screen (Step 1)
   if (flowStep === 'intro') {
     return (
+      <>
       <div className="min-h-screen portfolio-bg pb-24 px-4 relative overflow-hidden">
         <TopBar />
 
@@ -560,7 +495,7 @@ export function ProposalBuilder() {
           <span>Real-time estimates • Industry-standard rates • AI-powered insights</span>
         </div>
         
-        <div className="max-w-3xl mx-auto relative z-10 mt-6">
+        <div className={`${estimate ? 'max-w-full' : 'max-w-3xl'} mx-auto relative z-10 mt-6`}>
           {/* NEW PROGRESSIVE CARD - Replaces old multi-step flow */}
           <ProgressiveCard
             jobTitle={jobTitle}
@@ -823,7 +758,7 @@ export function ProposalBuilder() {
                 </span>
               </div>
               <div className="space-y-1.5">
-                {agentTranscriptHistory.map((line, idx) => (
+                {agentTranscriptHistory.map((line: string, idx: number) => (
                   <p key={`${idx}-${line.slice(0, 8)}`} className="leading-snug">
                     {line}
                   </p>
@@ -833,8 +768,10 @@ export function ProposalBuilder() {
           )}
         </div>
       </div>
-    );
-  }
+      <VersionManager currentVersion="v.91" />
+    </>
+  );
+}
 
   // Strategic market & competitive research screen (Step 2)
   if (flowStep === 'research') {
@@ -853,6 +790,7 @@ export function ProposalBuilder() {
     };
 
     return (
+      <>
       <div className="min-h-screen portfolio-bg pb-12 px-4">
         <TopBar />
         <div className="max-w-5xl mx-auto pt-10">
@@ -1021,12 +959,15 @@ export function ProposalBuilder() {
           </div>
         </div>
       </div>
-    );
-  }
+      <VersionManager currentVersion="v.91" />
+    </>
+  );
+}
 
   // Estimate/Dashboard screen (after questions are answered) - check BEFORE questions
   if (showEstimate && estimate) {
     return (
+      <>
       <div className="min-h-screen portfolio-bg pb-12 px-4">
         <TopBar />
         <div className="max-w-6xl mx-auto pt-10">
@@ -1089,8 +1030,10 @@ export function ProposalBuilder() {
           />
         </div>
       </div>
-    );
-  }
+      <VersionManager currentVersion="v.91" />
+    </>
+  );
+}
 
   // Questions screen (flowStep === 'questions')
   if (flowStep === 'questions') {
@@ -1219,6 +1162,7 @@ export function ProposalBuilder() {
             </div>
           </div>
         )}
+        <VersionManager currentVersion="v.91" />
       </>
     );
   }
@@ -1226,11 +1170,14 @@ export function ProposalBuilder() {
 
   // Default fallback - should never reach here, but ensures something renders
   return (
-    <div className="min-h-screen portfolio-bg py-12 px-4 flex items-center justify-center">
-      <div className="text-white text-center">
-        <h2 className="text-2xl font-bold mb-4">Loading...</h2>
-        <p className="text-white/70">Please wait while we prepare your proposal builder.</p>
+    <>
+      <div className="min-h-screen portfolio-bg py-12 px-4 flex items-center justify-center">
+        <div className="text-white text-center">
+          <h2 className="text-2xl font-bold mb-4">Loading...</h2>
+          <p className="text-white/70">Please wait while we prepare your proposal builder.</p>
+        </div>
       </div>
-    </div>
+      <VersionManager currentVersion="v.91" />
+    </>
   );
 }
