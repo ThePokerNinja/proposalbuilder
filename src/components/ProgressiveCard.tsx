@@ -2019,15 +2019,13 @@ export function ProgressiveCard({
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
       <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap gap-8 items-start justify-center' : ''}`}>
-        {/* Left Column: Cards and Button - 30% width with 100px left padding when estimate appears */}
+        {/* Left Column: Cards and Button - 30% width when estimate appears */}
         <div 
           className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
           style={estimate ? { 
-            width: 'calc(30% - 100px)',
-            minWidth: 'calc(30% - 100px)',
-            maxWidth: 'calc(30% - 100px)',
-            paddingLeft: '100px',
-            boxSizing: 'border-box'
+            width: '30%',
+            minWidth: '30%',
+            maxWidth: '30%'
           } : {}}
         >
           <div className="relative group">
