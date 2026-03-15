@@ -1522,7 +1522,8 @@ export function ProgressiveCard({
     const isHovered = hoveredStep === stepIndex;
     const isCollapsed = collapsedSteps.has(stepIndex) && (currentStep === -1 || !isActive);
     // When estimate exists, always show collapsed view for all questions (regardless of completion)
-    const shouldShowCollapsed = (isCollapsed && !isHovered && !isActive) || (estimate && !isActive && !isHovered);
+    // Always show investment-clarity question in collapsed view when estimate exists (even if hovered)
+    const shouldShowCollapsed = (isCollapsed && !isHovered && !isActive) || (estimate && !isActive && !isHovered) || (estimate && question.id === 'investment-clarity');
     
     // Collapsed view
     if (shouldShowCollapsed) {
