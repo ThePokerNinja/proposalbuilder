@@ -2018,14 +2018,16 @@ export function ProgressiveCard({
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap gap-8 items-start justify-center' : ''}`}>
-        {/* Left Column: Cards and Button - 30% width when estimate appears */}
+      <div className={`w-full ${estimate ? 'relative' : ''}`}>
+        {/* Left Column: Cards and Button - Right-aligned to horizontal center */}
         <div 
-          className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
+          className={estimate ? 'flex-shrink-0 flex flex-col absolute' : 'w-full'}
           style={estimate ? { 
             width: '30%',
             minWidth: '30%',
-            maxWidth: '30%'
+            maxWidth: '30%',
+            right: 'calc(50% + 16px)', // Right edge at center + half gap (16px)
+            top: 0
           } : {}}
         >
           <div className="relative group">
@@ -2398,16 +2400,18 @@ export function ProgressiveCard({
             })()}
         </div>
         
-        {/* Right Column: Estimate Visualization - 46.8% width (30% increase from 36%) */}
+        {/* Right Column: Estimate Visualization - Left-aligned to horizontal center */}
         {estimate && setEstimate ? (
           <div 
-            className="flex-shrink-0"
+            className="flex-shrink-0 absolute"
             data-estimate-section
             style={{ 
               animation: 'slideInRight 0.7s ease-out forwards',
               width: '46.8%',
               minWidth: '46.8%',
-              maxWidth: '46.8%'
+              maxWidth: '46.8%',
+              left: 'calc(50% + 16px)', // Left edge at center + half gap (16px)
+              top: 0
             }}
           >
             <EstimateVisualization

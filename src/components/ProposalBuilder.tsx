@@ -968,9 +968,9 @@ export function ProposalBuilder() {
   if (showEstimate && estimate) {
     return (
       <>
-      <div className="min-h-screen portfolio-bg pb-12 px-4" style={{ marginLeft: '-500px', marginRight: '-500px', paddingLeft: '500px', paddingRight: '500px' }}>
+      <div className="min-h-screen portfolio-bg pb-12 px-4" style={{ marginLeft: '-500px', marginRight: '-500px', paddingLeft: '500px', paddingRight: '500px', maxWidth: '100%' }}>
         <TopBar />
-        <div className="max-w-6xl mx-auto pt-10">
+        <div className="w-full mx-auto pt-10">
           {/* Top actions row: Back, Start over, Export */}
           <div className="mb-6 flex items-center justify-between">
             <button
