@@ -2025,19 +2025,35 @@ export function ProgressiveCard({
             transform: translateX(0);
           }
         }
+        
+        /* Slide In Left Animation for Estimate */
+        @keyframes slideInLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-40px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap items-start justify-center' : ''}`} style={estimate ? { gap: '1.75%' } : {}}>
-        {/* Left Column: Cards and Button - Center-aligned with estimate */}
-        <div 
-          className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
-          style={estimate ? { 
-            width: '30%',
-            minWidth: '30%',
-            maxWidth: '30%'
-          } : {}}
-        >
+      <div className={`w-full ${estimate ? 'flex flex-col' : ''}`}>
+        {/* Two-column wrapper when estimate exists */}
+        {estimate ? (
+          <>
+          <div className="flex flex-row flex-nowrap items-start justify-center w-full" style={{ gap: '2rem' }}>
+            {/* Left Column: Cards - Center-aligned with estimate */}
+            <div 
+              className="flex-shrink-0 flex flex-col"
+              style={{ 
+                width: '30%',
+                minWidth: '30%',
+                maxWidth: '30%'
+              }}
+            >
           <div className="relative group">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
             <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
@@ -2125,157 +2141,221 @@ export function ProgressiveCard({
               </div>
             </div>
           )}
-        
-        {/* Generate Estimate Button - Separate container outside the card */}
-        {(() => {
-              // Always show button when estimate exists (for regenerate)
-              if (estimate) {
-                const isComplete = allStepsComplete();
-                const displayProgress = isComplete ? 100 : calculateProgress();
-                
-                return (
-                  <div 
-                    style={{ 
-                      paddingTop: '12px', 
-                      marginTop: '12px',
-                      animation: 'slideDown 0.7s ease-out forwards'
-                    }}
-                  >
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        // Double-check completion at click time
-                        const clickTimeComplete = allStepsComplete();
-                        
-                        if (!clickTimeComplete) {
-                          return;
-                        }
-                        
-                        const newEstimate = onGenerateEstimate();
-                        if (newEstimate && setEstimate) {
-                          // Ensure questions card stays visible when estimate is generated
-                          setShowQuestionsCard(true);
-                          // Ensure all questions are visible
-                          setVisibleSteps(prev => {
-                            const newSet = new Set(prev);
-                            questions.forEach((_, idx) => {
-                              const stepIndex = RESEARCH_STEP_INDEX + 1 + idx;
-                              newSet.add(stepIndex);
-                            });
-                            return newSet;
-                          });
-                          setEstimate(newEstimate);
-                        }
+            </div>
+            
+            {/* Right Column: Estimate Visualization - Center-aligned with left column, matches height */}
+            {setEstimate ? (
+              <div 
+                className="flex-shrink-0 flex flex-col"
+                data-estimate-section
+                style={{ 
+                  animation: 'slideInRight 0.7s ease-out forwards',
+                  width: '35%',
+                  minWidth: '35%',
+                  maxWidth: '35%',
+                  alignSelf: 'stretch'
+                }}
+              >
+                <div className="flex-1">
+                  <EstimateVisualization
+                  tasks={estimate.tasks}
+                  timeline={estimate.timeline}
+                  totalHours={estimate.totalHours}
+                  onTaskMultiplierChange={onTaskMultiplierChange || (() => {})}
+                  onTasksChange={(updatedTasks) => {
+                    // Update estimate with new task selections
+                    const newTotalHours = updatedTasks
+                      .filter((t) => t.selected !== false)
+                      .reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
+                    
+                    // Recalculate timeline based on new total hours
+                    const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
+                    const timelineWeeks = calculateTimeline(newTotalHours, timelineAnswer?.value as string | undefined);
+                    
+                    setEstimate({
+                      ...estimate,
+                      tasks: updatedTasks,
+                      totalHours: newTotalHours,
+                      timeline: timelineWeeks,
+                    });
+                  }}
+                  projectName={projectName}
+                  projectSummary={projectContext}
+                  answers={answers}
+                  marketResearch={marketResearch}
+                  />
+                </div>
+              </div>
+            ) : null}
+            </div>
+            
+            {/* Generate Estimate Button - Spans both columns when estimate exists */}
+            {(() => {
+                // Always show button when estimate exists (for regenerate)
+                if (estimate) {
+                  const isComplete = allStepsComplete();
+                  const displayProgress = isComplete ? 100 : calculateProgress();
+                  
+                  return (
+                    <div 
+                      className="w-full"
+                      style={{ 
+                        paddingTop: '12px', 
+                        marginTop: '12px',
+                        animation: 'slideDown 0.7s ease-out forwards'
                       }}
-                      disabled={!isComplete}
-                      className={`w-full group relative flex items-center justify-center px-8 py-5 rounded-xl font-bold text-lg transition-all duration-300 shadow-2xl overflow-hidden ${
-                        isComplete
-                          ? 'hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700] text-black hover:from-[#FFC700] hover:via-[#FFD700] hover:to-[#FFC700] hover:shadow-[#FFD700]/50 cursor-pointer'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
                     >
-                      {/* TREATMENT 1: Molten Gold with Animated Flow & Progressive Glow - ACTIVE */}
-                      <div
-                        className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
-                        style={{ 
-                          width: `${displayProgress}%`,
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          
+                          // Double-check completion at click time
+                          const clickTimeComplete = allStepsComplete();
+                          
+                          if (!clickTimeComplete) {
+                            return;
+                          }
+                          
+                          const newEstimate = onGenerateEstimate();
+                          if (newEstimate && setEstimate) {
+                            // Ensure questions card stays visible when estimate is generated
+                            setShowQuestionsCard(true);
+                            // Ensure all questions are visible
+                            setVisibleSteps(prev => {
+                              const newSet = new Set(prev);
+                              questions.forEach((_, idx) => {
+                                const stepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+                                newSet.add(stepIndex);
+                              });
+                              return newSet;
+                            });
+                            setEstimate(newEstimate);
+                          }
                         }}
+                        disabled={!isComplete}
+                        className={`w-full group relative flex items-center justify-center px-8 py-5 rounded-xl font-bold text-lg transition-all duration-300 shadow-2xl overflow-hidden ${
+                          isComplete
+                            ? 'hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700] text-black hover:from-[#FFC700] hover:via-[#FFD700] hover:to-[#FFC700] hover:shadow-[#FFD700]/50 cursor-pointer'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                       >
-                        {/* Base molten gold gradient */}
-                        <div 
-                          className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFA500] via-[#FFD700] to-[#FFA500]"
-                          style={{
-                            backgroundSize: '200% 100%',
-                            animation: 'moltenFlow 3s ease-in-out infinite',
-                            opacity: 0.7 + (displayProgress / 100) * 0.3, // Gets brighter as progress increases
+                        {/* TREATMENT 1: Molten Gold with Animated Flow & Progressive Glow - ACTIVE */}
+                        <div
+                          className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
+                          style={{ 
+                            width: `${displayProgress}%`,
                           }}
-                        />
+                        >
+                          {/* Base molten gold gradient */}
+                          <div 
+                            className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFA500] via-[#FFD700] to-[#FFA500]"
+                            style={{
+                              backgroundSize: '200% 100%',
+                              animation: 'moltenFlow 3s ease-in-out infinite',
+                              opacity: 0.7 + (displayProgress / 100) * 0.3, // Gets brighter as progress increases
+                            }}
+                          />
+                          
+                          {/* Animated shimmer wave */}
+                          <div 
+                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                            style={{
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmerWave 2s ease-in-out infinite',
+                              transform: 'translateX(-100%)',
+                            }}
+                          />
+                          
+                          {/* Progressive glow that intensifies with progress */}
+                          <div 
+                            className="absolute inset-0"
+                            style={{
+                              boxShadow: `0 0 ${20 + (displayProgress / 100) * 40}px rgba(255, 215, 0, ${0.4 + (displayProgress / 100) * 0.6})`,
+                              filter: `brightness(${1 + (displayProgress / 100) * 0.5})`,
+                            }}
+                          />
+                        </div>
                         
-                        {/* Animated shimmer wave */}
-                        <div 
-                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                          style={{
-                            backgroundSize: '200% 100%',
-                            animation: 'shimmerWave 2s ease-in-out infinite',
-                            transform: 'translateX(-100%)',
-                          }}
-                        />
-                        
-                        {/* Progressive glow that intensifies with progress */}
-                        <div 
-                          className="absolute inset-0"
-                          style={{
-                            boxShadow: `0 0 ${20 + (displayProgress / 100) * 40}px rgba(255, 215, 0, ${0.4 + (displayProgress / 100) * 0.6})`,
-                            filter: `brightness(${1 + (displayProgress / 100) * 0.5})`,
-                          }}
-                        />
-                      </div>
-                      
-                      {/* Shimmer effect - only when complete */}
-                      {isComplete && (
-                        <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
-                      )}
-                      
-                      <span className="relative flex items-center gap-3 z-10">
+                        {/* Shimmer effect - only when complete */}
                         {isComplete && (
-                          <>
-                            Regenerate Estimate
-                            <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
-                          </>
+                          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
                         )}
-                      </span>
-                    </button>
-                  </div>
-                );
-              }
-              
-              // Check completion directly (more reliable than state)
-              const isComplete = allStepsComplete();
-              const progress = calculateProgress();
-              
-              // Show button if all steps are complete
-              // Also check if first field is complete as a fallback (for early visibility)
-              const firstFieldComplete = isStepComplete(0); // jobTitle is index 0
-              
-              // Show button if:
-              // 1. All steps are complete, OR
-              // 2. First field is complete (regardless of collapse state - show early)
-              // This ensures button appears early (after first question) and stays visible when all complete
-              const shouldShow = isComplete || firstFieldComplete;
-              if (!shouldShow) {
+                        
+                        <span className="relative flex items-center gap-3 z-10">
+                          {isComplete && (
+                            <>
+                              Regenerate Estimate
+                              <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                }
+                
                 return null;
-              }
-              
-              // When complete, progress should be 100%
-              const displayProgress = isComplete ? 100 : progress;
+              })()}
+          </>
+        ) : (
+          /* Single column layout when no estimate - button stays inside */
+          <div className="w-full flex flex-col">
+            {/* Same structure as before but without estimate column */}
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+              <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
+                <div className="space-y-3 min-w-0 w-full flex flex-col relative z-0">
+                  {BASIC_STEPS.map((step, idx) => renderBasicField(idx, step))}
+                  {renderResearchStep()}
+                </div>
+              </div>
+            </div>
+            
+            {/* Questions Card */}
+            {(() => {
+              const researchComplete = isStepComplete(RESEARCH_STEP_INDEX);
+              const researchCollapsed = collapsedSteps.has(RESEARCH_STEP_INDEX);
+              const hasMovedPastResearch = currentStep > RESEARCH_STEP_INDEX;
+              const isOnDiscoveryQuestion = currentStep >= RESEARCH_STEP_INDEX + 1;
+              const hasQuestions = questions.length > 0;
+              const hasAnyCompleteQuestions = questions.some((_, idx) => {
+                const qStepIndex = RESEARCH_STEP_INDEX + 1 + idx;
+                return isStepComplete(qStepIndex);
+              });
+              const shouldShowCard = showQuestionsCard && hasQuestions && researchComplete && researchCollapsed && 
+                (hasMovedPastResearch || isOnDiscoveryQuestion || hasAnyCompleteQuestions);
+              return shouldShowCard;
+            })() && questions.length > 0 && (
+              <div className="relative group mt-6" style={{ animation: 'slideDown 0.7s ease-out forwards' }}>
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+                <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
+                  <div className="space-y-3 min-w-0 w-full flex flex-col relative z-0">
+                    {questions.length > 0 && questions.map((question, idx) => renderQuestion(idx, question))}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Generate Estimate Button - Single column layout */}
+            {(() => {
+              const isComplete = allStepsComplete();
+              const firstFieldComplete = isStepComplete(0);
+              const shouldShow = isComplete || firstFieldComplete;
+              if (!shouldShow) return null;
+              const displayProgress = isComplete ? 100 : calculateProgress();
               
               return (
-                <div 
-                  style={{ 
-                    paddingTop: '12px', 
-                    marginTop: '12px',
-                    animation: 'slideDown 0.7s ease-out forwards'
-                  }}
-                >
+                <div style={{ paddingTop: '12px', marginTop: '12px', animation: 'slideDown 0.7s ease-out forwards' }}>
                   <button
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      
-                      // Double-check completion at click time
                       const clickTimeComplete = allStepsComplete();
-                      
-                      if (!clickTimeComplete) {
-                        return;
-                      }
-                      
+                      if (!clickTimeComplete) return;
                       const newEstimate = onGenerateEstimate();
                       if (newEstimate && setEstimate) {
-                        // Ensure questions card stays visible when estimate is generated
                         setShowQuestionsCard(true);
-                        // Ensure all questions are visible
                         setVisibleSteps(prev => {
                           const newSet = new Set(prev);
                           questions.forEach((_, idx) => {
@@ -2294,110 +2374,16 @@ export function ProgressiveCard({
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }`}
                   >
-                    {/* TREATMENT 1: Molten Gold with Animated Flow & Progressive Glow - ACTIVE */}
-                    <div
-                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
-                      style={{ 
-                        width: `${displayProgress}%`,
-                      }}
-                    >
-                      {/* Base molten gold gradient */}
-                      <div 
-                        className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFA500] via-[#FFD700] to-[#FFA500]"
-                        style={{
-                          backgroundSize: '200% 100%',
-                          animation: 'moltenFlow 3s ease-in-out infinite',
-                          opacity: 0.7 + (displayProgress / 100) * 0.3, // Gets brighter as progress increases
-                        }}
-                      />
-                      
-                      {/* Animated shimmer wave */}
-                      <div 
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                        style={{
-                          backgroundSize: '200% 100%',
-                          animation: 'shimmerWave 2s ease-in-out infinite',
-                          transform: 'translateX(-100%)',
-                        }}
-                      />
-                      
-                      {/* Progressive glow that intensifies with progress */}
-                      <div 
-                        className="absolute inset-0"
-                        style={{
-                          boxShadow: `0 0 ${20 + (displayProgress / 100) * 40}px rgba(255, 215, 0, ${0.4 + (displayProgress / 100) * 0.6})`,
-                          filter: `brightness(${1 + (displayProgress / 100) * 0.5})`,
-                        }}
-                      />
+                    <div className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden" style={{ width: `${displayProgress}%` }}>
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFA500] via-[#FFD700] to-[#FFA500]" style={{ backgroundSize: '200% 100%', animation: 'moltenFlow 3s ease-in-out infinite', opacity: 0.7 + (displayProgress / 100) * 0.3 }} />
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ backgroundSize: '200% 100%', animation: 'shimmerWave 2s ease-in-out infinite', transform: 'translateX(-100%)' }} />
+                      <div className="absolute inset-0" style={{ boxShadow: `0 0 ${20 + (displayProgress / 100) * 40}px rgba(255, 215, 0, ${0.4 + (displayProgress / 100) * 0.6})`, filter: `brightness(${1 + (displayProgress / 100) * 0.5})` }} />
                     </div>
-                    
-                    {/* TREATMENT 2: Liquid Fill with Bubbles (Alternative - commented out) */}
-                    {/* Uncomment to try this treatment instead:
-                    <div
-                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
-                      style={{ width: `${displayProgress}%` }}
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-b from-[#FFD700] via-[#FFA500] to-[#FF8C00]" />
-                      <div 
-                        className="absolute inset-0 opacity-30"
-                        style={{
-                          backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 2px, transparent 2px)',
-                          backgroundSize: '30px 30px',
-                          animation: 'bubbleFloat 4s ease-in-out infinite',
-                        }}
-                      />
-                      <div 
-                        className="absolute inset-0"
-                        style={{
-                          boxShadow: `inset 0 0 ${30 + (displayProgress / 100) * 50}px rgba(255, 215, 0, ${0.5 + (displayProgress / 100) * 0.5})`,
-                          filter: `brightness(${1 + (displayProgress / 100) * 0.3})`,
-                        }}
-                      />
-                      <div 
-                        className="absolute inset-0"
-                        style={{
-                          boxShadow: `0 0 ${15 + (displayProgress / 100) * 35}px rgba(255, 165, 0, ${0.3 + (displayProgress / 100) * 0.7})`,
-                        }}
-                      />
-                    </div>
-                    */}
-                    
-                    {/* TREATMENT 3: Particle Sparkle (Alternative - commented out) */}
-                    {/* Uncomment to try this treatment instead:
-                    <div
-                      className="absolute inset-0 transition-all duration-500 ease-out overflow-hidden"
-                      style={{ width: `${displayProgress}%` }}
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FFC700] to-[#FFD700]" />
-                      <div 
-                        className="absolute inset-0"
-                        style={{
-                          backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)`,
-                          backgroundSize: '20px 20px',
-                          backgroundPosition: '0 0',
-                          animation: 'sparkle 1.5s linear infinite',
-                          opacity: 0.3 + (displayProgress / 100) * 0.7,
-                        }}
-                      />
-                      <div 
-                        className="absolute inset-0"
-                        style={{
-                          boxShadow: `0 0 ${15 + (displayProgress / 100) * 35}px rgba(255, 215, 0, ${0.3 + (displayProgress / 100) * 0.7})`,
-                          filter: `brightness(${1 + (displayProgress / 100) * 0.4})`,
-                        }}
-                      />
-                    </div>
-                    */}
-                    
-                    {/* Shimmer effect - only when complete */}
-                    {isComplete && (
-                      <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
-                    )}
-                    
+                    {isComplete && <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>}
                     <span className="relative flex items-center gap-3 z-10">
                       {isComplete && (
                         <>
-                          {estimate ? 'Regenerate Estimate' : 'Generate Estimate'}
+                          Generate Estimate
                           <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                         </>
                       )}
@@ -2406,49 +2392,8 @@ export function ProgressiveCard({
                 </div>
               );
             })()}
-        </div>
-        
-        {/* Right Column: Estimate Visualization - Center-aligned with left column */}
-        {estimate && setEstimate ? (
-          <div 
-            className="flex-shrink-0"
-            data-estimate-section
-            style={{ 
-              animation: 'slideInRight 0.7s ease-out forwards',
-              width: '42.12%',
-              minWidth: '42.12%',
-              maxWidth: '42.12%'
-            }}
-          >
-            <EstimateVisualization
-            tasks={estimate.tasks}
-            timeline={estimate.timeline}
-            totalHours={estimate.totalHours}
-            onTaskMultiplierChange={onTaskMultiplierChange || (() => {})}
-            onTasksChange={(updatedTasks) => {
-              // Update estimate with new task selections
-              const newTotalHours = updatedTasks
-                .filter((t) => t.selected !== false)
-                .reduce((sum, task) => sum + task.baseHours * task.multiplier, 0);
-              
-              // Recalculate timeline based on new total hours
-              const timelineAnswer = answers.find((a) => a.questionId === 'timeline-preference' || a.questionId === 'timeline-urgency');
-              const timelineWeeks = calculateTimeline(newTotalHours, timelineAnswer?.value as string | undefined);
-              
-              setEstimate({
-                ...estimate,
-                tasks: updatedTasks,
-                totalHours: newTotalHours,
-                timeline: timelineWeeks,
-              });
-            }}
-            projectName={projectName}
-            projectSummary={projectContext}
-            answers={answers}
-            marketResearch={marketResearch}
-            />
           </div>
-        ) : null}
+        )}
       </div>
     </>
   );

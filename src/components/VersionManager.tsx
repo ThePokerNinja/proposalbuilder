@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Code, X, Copy, Download, Check, ExternalLink, FileText } from 'lucide-react';
+import { Code, X, Copy, Download, Check, ExternalLink, FileText, Home } from 'lucide-react';
 
 export interface BuildVersion {
   id: string;
@@ -13,9 +13,10 @@ export interface BuildVersion {
 
 interface VersionManagerProps {
   currentVersion?: string;
+  showEstimate?: boolean;
 }
 
-export function VersionManager({ currentVersion = 'v.9' }: VersionManagerProps) {
+export function VersionManager({ currentVersion = 'v.92', showEstimate = false }: VersionManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [versions, setVersions] = useState<BuildVersion[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -81,19 +82,37 @@ export function VersionManager({ currentVersion = 'v.9' }: VersionManagerProps) 
           migrated.push(v9);
         }
         
-        // Check if v.91 exists, if not save it
+        // Check if v.91 exists, update it with current state (archived)
         const v91Exists = migrated.find(v => v.version === 'v.91');
-        if (!v91Exists) {
-          // Save v.91 as current version
+        if (v91Exists) {
+          // Update v.91 description to reflect archived state
+          v91Exists.description = 'Two-column layout with estimate: Left column (30% width) contains two stacked cards (basic fields + research, and discovery questions). Right column (35% width) contains estimate visualization. Gap (2rem) centered horizontally. Full progress tracking and Generate Estimate button.';
+        } else {
+          // Save v.91 as archived version
           const v91: BuildVersion = {
             id: 'v91',
             version: 'v.91',
             name: 'Version 91',
             createdAt: new Date().toISOString(),
-            description: 'Two-card layout: Main card with basic fields and research, second animated card with discovery questions appearing after step 2. Full progress tracking and Generate Estimate button.',
+            description: 'Two-column layout with estimate: Left column (30% width) contains two stacked cards (basic fields + research, and discovery questions). Right column (35% width) contains estimate visualization. Gap (2rem) centered horizontally. Full progress tracking and Generate Estimate button.',
             demoUrl: window.location.origin + window.location.pathname,
           };
           migrated.push(v91);
+        }
+        
+        // Check if v.92 exists, if not save it (current version)
+        const v92Exists = migrated.find(v => v.version === 'v.92');
+        if (!v92Exists) {
+          // Save v.92 as current version
+          const v92: BuildVersion = {
+            id: 'v92',
+            version: 'v.92',
+            name: 'Version 92',
+            createdAt: new Date().toISOString(),
+            description: 'Two-column layout with estimate: Left column (30% width) contains two stacked cards. Right column (35% width) contains estimate visualization. Gap (2rem) centered horizontally.',
+            demoUrl: window.location.origin + window.location.pathname,
+          };
+          migrated.push(v92);
         }
         
         setVersions(migrated);
@@ -122,11 +141,19 @@ export function VersionManager({ currentVersion = 'v.9' }: VersionManagerProps) 
       version: 'v.91',
       name: 'Version 91',
       createdAt: new Date().toISOString(),
-      description: 'Two-card layout: Main card with basic fields and research, second animated card with discovery questions appearing after step 2. Full progress tracking and Generate Estimate button.',
+      description: 'Two-column layout with estimate: Left column (30% width) contains two stacked cards (basic fields + research, and discovery questions). Right column (35% width) contains estimate visualization. Gap (2rem) centered horizontally. Full progress tracking and Generate Estimate button.',
       demoUrl: window.location.origin + window.location.pathname, // Current URL
     };
-    setVersions([v9, v91]);
-    localStorage.setItem('build-versions', JSON.stringify([v9, v91]));
+    const v92: BuildVersion = {
+      id: 'v92',
+      version: 'v.92',
+      name: 'Version 92',
+      createdAt: new Date().toISOString(),
+      description: 'Two-column layout with estimate: Left column (30% width) contains two stacked cards. Right column (35% width) contains estimate visualization. Gap (2rem) centered horizontally.',
+      demoUrl: window.location.origin + window.location.pathname, // Current URL
+    };
+    setVersions([v9, v91, v92]);
+    localStorage.setItem('build-versions', JSON.stringify([v9, v91, v92]));
   };
 
   const handleCopyCode = async (version: BuildVersion) => {
@@ -171,20 +198,51 @@ export function VersionManager({ currentVersion = 'v.9' }: VersionManagerProps) 
     <>
       {/* Fixed bottom icons */}
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
-        {/* Estimate shortcut button */}
+        {/* Home/Refresh button */}
         <button
           onClick={() => {
-            // Dispatch event to navigate to estimate
+            // Refresh the page
             if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('proposalbuilder:show-estimate'));
+              window.location.reload();
             }
           }}
           className="p-3 bg-white/90 hover:bg-white backdrop-blur-sm rounded-full shadow-lg border border-gray-200/50 transition-all duration-200 hover:scale-110 active:scale-95"
-          aria-label="Go to estimate"
-          title="Go to estimate"
+          aria-label="Refresh page"
+          title="Refresh page"
         >
-          <FileText className="w-5 h-5 text-gray-700" />
+          <Home className="w-5 h-5 text-gray-700" />
         </button>
+        
+        {/* Estimate shortcut / Download button */}
+        {showEstimate ? (
+          <button
+            onClick={() => {
+              // Dispatch event to download SOW PDF
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('proposalbuilder:export-sow'));
+              }
+            }}
+            className="p-3 bg-[#FFD700] hover:bg-[#FFC700] rounded-full shadow-lg border border-[#FFD700]/50 transition-all duration-200 hover:scale-110 active:scale-95"
+            aria-label="Download SOW PDF"
+            title="Download SOW PDF"
+          >
+            <Download className="w-5 h-5 text-black" />
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              // Dispatch event to navigate to estimate
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('proposalbuilder:show-estimate'));
+              }
+            }}
+            className="p-3 bg-white/90 hover:bg-white backdrop-blur-sm rounded-full shadow-lg border border-gray-200/50 transition-all duration-200 hover:scale-110 active:scale-95"
+            aria-label="Go to estimate"
+            title="Go to estimate"
+          >
+            <FileText className="w-5 h-5 text-gray-700" />
+          </button>
+        )}
         
         {/* Archive button */}
         <button

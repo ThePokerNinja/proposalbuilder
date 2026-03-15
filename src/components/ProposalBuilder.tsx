@@ -104,7 +104,7 @@ export function ProposalBuilder() {
   // Sticky top bar with voice agent + animated tagline
   const TopBar = () => (
     <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-auto">
-      <div className="max-w-5xl mx-auto flex flex-col items-center gap-3">
+      <div className="max-w-5xl mx-auto flex flex-col items-center gap-4">
         <VoiceInput
           onFormDataUpdate={handleVoiceFormDataUpdate}
           onTranscript={(text) => {
@@ -768,7 +768,7 @@ export function ProposalBuilder() {
           )}
         </div>
       </div>
-      <VersionManager currentVersion="v.91" />
+      <VersionManager currentVersion="v.92" showEstimate={!!estimate} />
     </>
   );
 }
@@ -959,7 +959,7 @@ export function ProposalBuilder() {
           </div>
         </div>
       </div>
-      <VersionManager currentVersion="v.91" />
+      <VersionManager currentVersion="v.92" showEstimate={!!estimate} />
     </>
   );
 }
@@ -1030,7 +1030,7 @@ export function ProposalBuilder() {
           />
         </div>
       </div>
-      <VersionManager currentVersion="v.91" />
+      <VersionManager currentVersion="v.92" showEstimate={!!estimate} />
     </>
   );
 }
@@ -1162,7 +1162,7 @@ export function ProposalBuilder() {
             </div>
           </div>
         )}
-        <VersionManager currentVersion="v.91" />
+        <VersionManager currentVersion="v.92" showEstimate={!!estimate} />
       </>
     );
   }
@@ -1177,7 +1177,7 @@ export function ProposalBuilder() {
           <p className="text-white/70">Please wait while we prepare your proposal builder.</p>
         </div>
       </div>
-      <VersionManager currentVersion="v.91" />
+      <VersionManager currentVersion="v.92" showEstimate={!!estimate} />
     </>
   );
 }

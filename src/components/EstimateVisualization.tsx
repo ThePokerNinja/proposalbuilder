@@ -312,40 +312,20 @@ export function EstimateVisualization({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tabCycleIndex]);
 
-  // Generate initial summary, problem statement, and measures of success from answers + market research
+  // Generate intelligent, dynamic summary, problem statement, and measures of success
+  // Updates in real-time as more data is filled in
   useEffect(() => {
-    if (answers.length > 0) {
-      const generatedSummary = generateSummaryFromAnswers(projectName, projectSummary, answers);
-      setEditableSummary(generatedSummary);
-      
-      // Extract problem statement
-      const problem = extractProblemStatement(projectName, projectSummary, answers);
-      setProblemStatement(problem);
-      
-      // Extract measures of success
-      const success = extractMeasuresOfSuccess(answers);
-      setMeasureOfSuccess(success);
-    } else if (!editableSummary) {
-      const baseSummary =
-        projectSummary || `This proposal outlines the scope, timeline, and investment for ${projectName}.`;
-      const marketLine = marketResearch
-        ? ` This engagement is grounded in a review of the target market, competitive landscape, and best‑practice signals to ensure the solution stands out meaningfully.`
-        : '';
-      setEditableSummary(baseSummary + marketLine);
-
-      const baseProblem =
-        projectSummary ||
-        `The project aims to address key business challenges and opportunities for ${projectName}.`;
-      const problemLine = marketResearch
-        ? ` In the current competitive context, the primary challenge is to differentiate through clarity, experience quality, and measurable outcomes.`
-        : '';
-      setProblemStatement(baseProblem + problemLine);
-
-      const successLine = marketResearch
-        ? 'Success will be measured by how effectively the experience outperforms comparable offerings—through engagement, conversion, and perceived brand quality.'
-        : 'Success will be measured through improved business metrics, user engagement, and achievement of project objectives.';
-      setMeasureOfSuccess(successLine);
-    }
+    // Always regenerate when inputs change - makes it more intelligent with more data
+    const generatedSummary = generateIntelligentSummary(projectName, projectSummary, answers, marketResearch);
+    setEditableSummary(generatedSummary);
+    
+    // Generate intelligent problem statement
+    const problem = generateIntelligentProblemStatement(projectName, projectSummary, answers, marketResearch);
+    setProblemStatement(problem);
+    
+    // Generate before/after KPI comparison for measure of success
+    const success = generateIntelligentMeasuresOfSuccess(projectName, projectSummary, answers, marketResearch);
+    setMeasureOfSuccess(success);
   }, [answers, projectName, projectSummary, marketResearch]);
 
   // Auto-resize textareas on mount and when content changes
@@ -361,85 +341,285 @@ export function EstimateVisualization({
     });
   }, [editableSummary, problemStatement, measureOfSuccess]);
 
-  // Extract problem statement from answers
-  function extractProblemStatement(projectName: string, projectSummary: string, answers: Answer[]): string {
+  // Generate intelligent executive summary - combines project summary with all context
+  // More intelligent as more questions/research are filled in
+  function generateIntelligentSummary(
+    projectName: string,
+    projectSummary: string,
+    answers: Answer[],
+    marketResearch: MarketResearchResult | null
+  ): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
+    const hasAnswers = answers.length > 0;
+    const hasResearch = marketResearch !== null;
+    const hasProjectSummary = projectSummary && projectSummary.trim().length > 0;
     
-    // First, try to get explicit problem statement
-    const problemAnswer = answerMap.get('problem-statement');
-    if (problemAnswer && typeof problemAnswer === 'string' && problemAnswer.trim()) {
-      return problemAnswer.trim();
-    }
+    // Start with project summary as the foundation (question 5 / project context)
+    let summary = '';
     
-    // Fall back to project summary if it exists
-    if (projectSummary && projectSummary.trim()) {
-      return projectSummary.trim();
-    }
-    
-    // Synthesize from current state and project scope
-    const currentState = answerMap.get('current-state');
-    const projectScope = answerMap.get('project-scope');
-    
-    let problem = `${projectName} requires `;
-    
-    if (currentState && typeof currentState === 'string') {
-      if (currentState.includes('Starting from scratch')) {
-        problem += 'a new digital presence to establish market presence and drive growth.';
-      } else if (currentState.includes('overhaul') || currentState.includes('complete overhaul')) {
-        problem += 'a comprehensive transformation to modernize and improve existing systems.';
-      } else if (currentState.includes('enhancement')) {
-        problem += 'strategic enhancements to optimize current operations and expand capabilities.';
-      } else {
-        problem += 'optimization and scaling to support business growth.';
-      }
-    } else if (projectScope && typeof projectScope === 'string') {
-      problem += `a ${projectScope.toLowerCase()} solution to address current business needs.`;
+    if (hasProjectSummary) {
+      summary = projectSummary.trim();
     } else {
-      problem += 'a strategic solution to address key business challenges and opportunities.';
+      summary = `This proposal outlines the strategic scope, timeline, and investment for ${projectName || 'this project'}.`;
     }
     
-    return problem;
+    // Enhance with answers - the more filled in, the more intelligent
+    if (hasAnswers) {
+      const enhancements: string[] = [];
+      
+      // Problem statement context
+      const problemStatement = answerMap.get('problem-statement');
+      if (problemStatement && typeof problemStatement === 'string' && problemStatement.trim()) {
+        if (!summary.toLowerCase().includes(problemStatement.toLowerCase().substring(0, 20))) {
+          enhancements.push(`This initiative directly addresses: ${problemStatement.trim()}`);
+        }
+      }
+      
+      // Business value and goals
+      const businessValue = answerMap.get('business-value');
+      if (businessValue) {
+        const values = Array.isArray(businessValue) ? businessValue : [businessValue];
+        if (values.length > 0) {
+          const topValues = values.slice(0, 2).map(v => typeof v === 'string' ? v : String(v));
+          enhancements.push(`Primary success metrics include ${topValues.join(' and ').toLowerCase()}.`);
+        }
+      }
+      
+      // Target audience
+      const targetAudience = answerMap.get('target-audience');
+      if (targetAudience && typeof targetAudience === 'string') {
+        enhancements.push(`The solution is specifically designed for ${targetAudience.toLowerCase()}.`);
+      }
+      
+      // Current state context
+      const currentState = answerMap.get('current-state');
+      if (currentState && typeof currentState === 'string') {
+        if (currentState.includes('Starting from scratch')) {
+          enhancements.push('This represents a foundational digital transformation, establishing a new presence from the ground up.');
+        } else if (currentState.includes('overhaul') || currentState.includes('complete overhaul')) {
+          enhancements.push('This comprehensive overhaul will modernize and transform existing systems to meet current market standards.');
+        } else if (currentState.includes('enhancement')) {
+          enhancements.push('Strategic enhancements will optimize current operations and expand capabilities.');
+        }
+      }
+      
+      // Project scope
+      const projectScope = answerMap.get('project-scope');
+      if (projectScope && typeof projectScope === 'string') {
+        enhancements.push(`The engagement focuses on ${projectScope.toLowerCase()}.`);
+      }
+      
+      // Technical requirements
+      const technicalRequirements = answerMap.get('technical-requirements');
+      if (technicalRequirements) {
+        const techReqs = Array.isArray(technicalRequirements) ? technicalRequirements : [technicalRequirements];
+        const filteredTech = techReqs.filter(r => r !== 'None - standalone project' && typeof r === 'string');
+        if (filteredTech.length > 0) {
+          enhancements.push(`Technical implementation includes ${filteredTech.slice(0, 2).join(' and ').toLowerCase()}.`);
+        }
+      }
+      
+      // Timeline context
+      const timeline = answerMap.get('timeline-urgency') || answerMap.get('timeline-preference');
+      if (timeline && typeof timeline === 'string') {
+        if (timeline.includes('Rush') || timeline.includes('Time-sensitive')) {
+          enhancements.push('The project will be executed on an accelerated timeline to meet critical business needs.');
+        }
+      }
+      
+      // Add enhancements if any
+      if (enhancements.length > 0) {
+        summary += ' ' + enhancements.join(' ');
+      }
+    }
+    
+    // Enhance with market research insights
+    if (hasResearch && marketResearch) {
+      if (marketResearch.marketSummary && marketResearch.marketSummary.trim()) {
+        summary += ` Market analysis reveals ${marketResearch.marketSummary.toLowerCase()}.`;
+      }
+      if (marketResearch.strategicRecommendations && marketResearch.strategicRecommendations.trim()) {
+        const recs = marketResearch.strategicRecommendations.substring(0, 150);
+        summary += ` Strategic recommendations include ${recs.toLowerCase()}.`;
+      }
+    }
+    
+    // Add closing statement if we have substantial context
+    if (hasAnswers || hasResearch) {
+      summary += ` This comprehensive approach ensures measurable outcomes that drive business value and position ${projectName || 'the project'} for long-term success.`;
+    }
+    
+    return summary.trim();
   }
 
-  // Extract measures of success from answers
-  function extractMeasuresOfSuccess(answers: Answer[]): string {
+  // Generate intelligent problem statement - dynamic based on real-time data
+  function generateIntelligentProblemStatement(
+    projectName: string,
+    projectSummary: string,
+    answers: Answer[],
+    marketResearch: MarketResearchResult | null
+  ): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
+    const hasAnswers = answers.length > 0;
+    const hasResearch = marketResearch !== null;
     
+    // Start with explicit problem statement if available
+    const problemAnswer = answerMap.get('problem-statement');
+    if (problemAnswer && typeof problemAnswer === 'string' && problemAnswer.trim()) {
+      let problem = problemAnswer.trim();
+      
+      // Enhance with additional context if available
+      if (hasResearch && marketResearch) {
+        if (marketResearch.competitiveLandscape) {
+          const competitive = marketResearch.competitiveLandscape.substring(0, 100);
+          problem += ` In the current competitive landscape, ${competitive.toLowerCase()}.`;
+        }
+      }
+      
+      return problem;
+    }
+    
+    // Synthesize from available data
+    let problem = '';
+    
+    // Use project summary as base if available
+    if (projectSummary && projectSummary.trim()) {
+      problem = projectSummary.trim();
+    } else {
+      problem = `${projectName || 'The organization'} faces key business challenges that require strategic solutions.`;
+    }
+    
+    // Enhance with current state
+    const currentState = answerMap.get('current-state');
+    if (currentState && typeof currentState === 'string') {
+      if (currentState.includes('Starting from scratch')) {
+        problem += ' Currently, there is no established digital presence, creating a critical gap in market visibility and customer engagement.';
+      } else if (currentState.includes('overhaul') || currentState.includes('complete overhaul')) {
+        problem += ' Existing systems are outdated and no longer meet current business needs or market expectations.';
+      } else if (currentState.includes('enhancement')) {
+        problem += ' Current capabilities require strategic enhancement to support growth and competitive positioning.';
+      } else {
+        problem += ' Optimization and scaling are needed to support business growth and market expansion.';
+      }
+    }
+    
+    // Add competitive context from research
+    if (hasResearch && marketResearch) {
+      if (marketResearch.competitiveLandscape) {
+        const competitive = marketResearch.competitiveLandscape.substring(0, 120);
+        problem += ` The competitive context indicates ${competitive.toLowerCase()}.`;
+      }
+      if (marketResearch.metrics && marketResearch.metrics.differentiationOpportunity < 50) {
+        problem += ' Differentiation in the market is critical to stand out and capture market share.';
+      }
+    }
+    
+    // Add business value context
     const businessValue = answerMap.get('business-value');
-    const userJourney = answerMap.get('user-journey');
-    const targetAudience = answerMap.get('target-audience');
-    
-    const measures: string[] = [];
-    
     if (businessValue) {
       const values = Array.isArray(businessValue) ? businessValue : [businessValue];
       if (values.length > 0) {
-        const topValues = values.slice(0, 3).map(v => typeof v === 'string' ? v : String(v));
-        measures.push(...topValues.map(v => `• ${v}`));
+        const primaryValue = typeof values[0] === 'string' ? values[0] : String(values[0]);
+        problem += ` Success requires achieving ${primaryValue.toLowerCase()}.`;
       }
     }
     
+    return problem.trim();
+  }
+
+  // Generate before/after KPI comparison for measure of success
+  function generateIntelligentMeasuresOfSuccess(
+    projectName: string,
+    projectSummary: string,
+    answers: Answer[],
+    marketResearch: MarketResearchResult | null
+  ): string {
+    const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
+    
+    // Get predicted KPI from market research
+    const kpi = marketResearch?.kpi;
+    
+    // Determine KPI1 (current/baseline) and KPI2 (projected improvement)
+    let kpi1Name = 'Current Performance';
+    let kpi1Value = 'Baseline';
+    let kpi2Name = 'Projected Performance';
+    let kpi2Value = 'Improved';
+    let kpiUnit = '';
+    let improvement = '';
+    
+    if (kpi) {
+      kpi1Name = `Current ${kpi.name}`;
+      kpi2Name = `Projected ${kpi.name}`;
+      kpiUnit = kpi.unit;
+      
+      // Parse example value to create realistic before/after
+      const exampleMatch = kpi.exampleValue.match(/(\d+(?:\.\d+)?)/);
+      if (exampleMatch) {
+        const baseValue = parseFloat(exampleMatch[1]);
+        // KPI1 (before) - lower end or baseline
+        const kpi1Num = baseValue * 0.6; // 60% of target as baseline
+        // KPI2 (after) - target or improved
+        const kpi2Num = baseValue;
+        // Calculate improvement percentage
+        const improvementPercent = ((kpi2Num - kpi1Num) / kpi1Num * 100).toFixed(0);
+        
+        kpi1Value = `${kpi1Num.toFixed(kpi.unit === '%' ? 1 : 0)}${kpiUnit}`;
+        kpi2Value = `${kpi2Num.toFixed(kpi.unit === '%' ? 1 : 0)}${kpiUnit}`;
+        improvement = `${improvementPercent}% improvement`;
+      } else {
+        kpi1Value = `Baseline ${kpiUnit}`;
+        kpi2Value = kpi.exampleValue;
+        improvement = 'Significant improvement expected';
+      }
+    } else {
+      // Fallback: use business value to determine KPIs
+      const businessValue = answerMap.get('business-value');
+      if (businessValue) {
+        const values = Array.isArray(businessValue) ? businessValue : [businessValue];
+        if (values.length > 0) {
+          const primaryValue = typeof values[0] === 'string' ? values[0] : String(values[0]);
+          kpi1Name = `Current ${primaryValue}`;
+          kpi2Name = `Improved ${primaryValue}`;
+          kpi1Value = 'Baseline measurement';
+          kpi2Value = 'Target achievement';
+          improvement = 'Measurable improvement';
+        }
+      }
+    }
+    
+    // Build before/after comparison
+    let measures = `**KPI1 (Before):** ${kpi1Name}\n`;
+    measures += `Current State: ${kpi1Value}\n\n`;
+    measures += `**KPI2 (After):** ${kpi2Name}\n`;
+    measures += `Projected State: ${kpi2Value}\n\n`;
+    measures += `**Expected Improvement:** ${improvement || 'Measurable improvement in key performance indicators'}`;
+    
+    // Add additional success metrics from answers
+    const additionalMetrics: string[] = [];
+    
+    const userJourney = answerMap.get('user-journey');
     if (userJourney) {
       const journeys = Array.isArray(userJourney) ? userJourney : [userJourney];
       if (journeys.length > 0) {
-        const topJourneys = journeys.slice(0, 2).map(j => typeof j === 'string' ? j : String(j));
-        measures.push(...topJourneys.map(j => `• Improved user experience through ${j.toLowerCase()}`));
+        const topJourney = typeof journeys[0] === 'string' ? journeys[0] : String(journeys[0]);
+        additionalMetrics.push(`Enhanced user experience through ${topJourney.toLowerCase()}`);
       }
     }
     
+    const targetAudience = answerMap.get('target-audience');
     if (targetAudience && typeof targetAudience === 'string') {
-      measures.push(`• Increased engagement and conversion among ${targetAudience.toLowerCase()}`);
+      additionalMetrics.push(`Increased engagement among ${targetAudience.toLowerCase()}`);
     }
     
-    if (measures.length === 0) {
-      return '• Achievement of project objectives\n• Improved business metrics\n• Enhanced user satisfaction\n• Successful project delivery within timeline and budget';
+    if (additionalMetrics.length > 0) {
+      measures += '\n\n**Additional Success Metrics:**\n';
+      measures += additionalMetrics.map(m => `• ${m}`).join('\n');
     }
     
-    return measures.join('\n');
+    return measures;
   }
 
-  // Generate comprehensive mission statement that describes the project plan in total
-  // This should read like a mission statement created during the proposal process
+  // Legacy function kept for backward compatibility
   function generateSummaryFromAnswers(projectName: string, _initialSummary: string, answers: Answer[]): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
     
