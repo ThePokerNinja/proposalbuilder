@@ -834,7 +834,7 @@ export function EstimateVisualization({
               <div 
                 className="mb-6 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden" 
                 style={{
-                  backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
+                  backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner2.gif')`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center center',
                   backgroundRepeat: 'no-repeat',
