@@ -177,23 +177,7 @@ export function generatePersonalizedQuestions(
     questions.push(techQuestion);
   }
 
-  // Question 9: Timeline & Urgency
-  const timelineQuestion: Question = {
-    id: 'timeline-urgency',
-    text: `What's driving the timeline for "${projectName}"? Understanding urgency helps us prioritize and deliver maximum value.`,
-    type: 'select',
-    options: [
-      'Time-sensitive launch or event (2-4 weeks)',
-      'Strategic initiative with standard timeline (1-3 months)',
-      'Long-term strategic project (3-6 months)',
-      'Flexible timeline - quality over speed',
-    ],
-    category: 'constraints',
-    weight: 0.8,
-  };
-  questions.push(timelineQuestion);
-
-  // Question 10: Budget & Investment Clarity
+  // Question 9: Budget & Investment Clarity
   const budgetQuestion: Question = {
     id: 'investment-clarity',
     text: `To ensure "${projectName}" delivers maximum ROI, what's your investment range? This helps us scope the right solution.`,
