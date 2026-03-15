@@ -762,6 +762,13 @@ export function EstimateVisualization({
           {/* ============================================ */}
           {/* SECTION 1: Header, Total Cost, Timeline Metrics, and Summary Sections */}
           {/* ============================================ */}
+          <div 
+            className="transition-all duration-500 ease-in-out overflow-hidden"
+            style={{
+              maxHeight: isSection1Open ? '5000px' : '120px',
+              opacity: isSection1Open ? 1 : 1,
+            }}
+          >
           {isSection1Open ? (
             <>
               {/* Header */}
@@ -916,13 +923,15 @@ export function EstimateVisualization({
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
-              className="mb-8 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all hover:shadow-md"
+              className="mb-8 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
-                minHeight: '80px'
+                minHeight: '80px',
+                opacity: isSection1Open ? 0 : 1,
+                transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
               }}
               onMouseEnter={() => {
                 setIsSection1Open(true);
@@ -946,6 +955,7 @@ export function EstimateVisualization({
               </div>
             </div>
           )}
+          </div>
           {/* End Section 1 */}
 
       {/* ============================================ */}
@@ -965,6 +975,13 @@ export function EstimateVisualization({
           setIsSection1Open(true);
         }}
       >
+        <div 
+          className="transition-all duration-500 ease-in-out overflow-hidden"
+          style={{
+            maxHeight: isSection2Open ? '5000px' : '80px',
+            opacity: isSection2Open ? 1 : 1,
+          }}
+        >
         {isSection2Open ? (
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
@@ -1217,7 +1234,13 @@ export function EstimateVisualization({
           </div>
         ) : (
           /* Collapsed Section 2 - Show horizontal summary row */
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all hover:shadow-md">
+          <div 
+            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            style={{
+              opacity: isSection2Open ? 0 : 1,
+              transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
+            }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h3 className="text-base font-bold text-gray-900">Resource Allocation</h3>
@@ -1240,6 +1263,7 @@ export function EstimateVisualization({
             </div>
           </div>
         )}
+        </div>
       </div>
       {/* End Section 2 */}
 
@@ -1334,6 +1358,13 @@ export function EstimateVisualization({
           setIsSection1Open(true);
         }}
       >
+        <div 
+          className="transition-all duration-500 ease-in-out overflow-hidden"
+          style={{
+            maxHeight: isSection3Open ? '5000px' : '80px',
+            opacity: isSection3Open ? 1 : 1,
+          }}
+        >
         {isSection3Open ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Milestones Breakdown - Left Column */}
@@ -1434,7 +1465,13 @@ export function EstimateVisualization({
           </div>
         ) : (
           /* Collapsed Section 3 - Show horizontal summary row */
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all hover:shadow-md">
+          <div 
+            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            style={{
+              opacity: isSection3Open ? 0 : 1,
+              transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
+            }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h3 className="text-base font-bold text-gray-900">Project Milestones & Timeline</h3>
@@ -1461,6 +1498,7 @@ export function EstimateVisualization({
             </div>
           </div>
         )}
+        </div>
       </div>
       {/* End Section 3 */}
 
