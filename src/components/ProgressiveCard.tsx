@@ -1293,7 +1293,8 @@ export function ProgressiveCard({
     };
     
     // Collapsed view - show KPI by default
-    if (isCollapsed && !isActive) {
+    // When estimate exists, show collapsed view if research is complete
+    if ((isCollapsed && !isActive) || (estimate && isComplete)) {
       return (
         <div
           ref={(el) => { stepRefs.current[RESEARCH_STEP_INDEX] = el; }}
@@ -1342,14 +1343,18 @@ export function ProgressiveCard({
     }
     
     // Full expanded view (active or not collapsed)
+    // When estimate exists, always show research step (even if not active)
+    const shouldShow = estimate || isActive || isComplete;
     return (
       <div
         ref={(el) => { stepRefs.current[RESEARCH_STEP_INDEX] = el; }}
         key="research-step"
         className={`transition-all duration-500 ease-out w-full focus:outline-none ${
-          isActive
+          !shouldShow
+            ? 'opacity-0 -translate-y-4 scale-95 pointer-events-none h-0 overflow-hidden'
+            : isActive
             ? 'opacity-100 translate-y-0 scale-100'
-            : isComplete
+            : isComplete || estimate
             ? 'opacity-60 translate-y-0 scale-[0.98]'
             : 'opacity-0 -translate-y-4 scale-95 pointer-events-none h-0 overflow-hidden'
         }`}
@@ -2100,7 +2105,7 @@ export function ProgressiveCard({
           )}
         
         {/* Generate Estimate Button - Separate container outside the card */}
-        {!estimate && (() => {
+        {(() => {
               // Check completion directly (more reliable than state)
               const isComplete = allStepsComplete();
               const progress = calculateProgress();
@@ -2267,7 +2272,7 @@ export function ProgressiveCard({
                     <span className="relative flex items-center gap-3 z-10">
                       {isComplete && (
                         <>
-                          Generate Estimate
+                          {estimate ? 'Regenerate Estimate' : 'Generate Estimate'}
                           <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                         </>
                       )}
