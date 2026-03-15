@@ -935,15 +935,13 @@ export function EstimateVisualization({
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
-              className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+              className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
                 minHeight: '50px',
-                paddingTop: '24px',
-                paddingBottom: '24px',
                 paddingLeft: '20px',
                 paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
@@ -1251,11 +1249,9 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 2 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
             style={{
               minHeight: '50px',
-              paddingTop: '28px',
-              paddingBottom: '28px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
@@ -1487,11 +1483,9 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 3 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md flex items-center"
             style={{
               minHeight: '50px',
-              paddingTop: '28px',
-              paddingBottom: '28px',
               paddingLeft: '20px',
               paddingRight: '20px',
               opacity: isSection3Open ? 0 : 1,
