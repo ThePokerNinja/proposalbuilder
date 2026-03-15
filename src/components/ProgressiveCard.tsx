@@ -2018,24 +2018,14 @@ export function ProgressiveCard({
       `}</style>
       
       {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'relative' : ''}`} style={estimate ? { minHeight: '100%' } : {}}>
-        {/* Left Column: Cards and Button - Right-aligned to horizontal center */}
-        {/* 
-          Layout breakdown (percentage-based):
-          - Left spacing: 21% (from 0% to left column start)
-          - Left column: 30% width
-          - Gap: 2% total (1% on each side of center)
-          - Estimate: 46.8% width
-          - Right spacing: 2.2% (from estimate end to 100%)
-        */}
+      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap items-start justify-center gap-4' : ''}`}>
+        {/* Left Column: Cards and Button - Center-aligned with estimate */}
         <div 
-          className={estimate ? 'flex-shrink-0 flex flex-col absolute' : 'w-full'}
+          className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
           style={estimate ? { 
             width: '30%',
             minWidth: '30%',
-            maxWidth: '30%',
-            right: '51%', // Right edge at center (50%) + half gap (1%)
-            top: 0
+            maxWidth: '30%'
           } : {}}
         >
           <div className="relative group">
@@ -2408,18 +2398,16 @@ export function ProgressiveCard({
             })()}
         </div>
         
-        {/* Right Column: Estimate Visualization - Left-aligned to horizontal center */}
+        {/* Right Column: Estimate Visualization - Center-aligned with left column */}
         {estimate && setEstimate ? (
           <div 
-            className="flex-shrink-0 absolute"
+            className="flex-shrink-0"
             data-estimate-section
             style={{ 
               animation: 'slideInRight 0.7s ease-out forwards',
               width: '42.12%',
               minWidth: '42.12%',
-              maxWidth: '42.12%',
-              left: '51%', // Left edge at center (50%) + half gap (1%)
-              top: 0
+              maxWidth: '42.12%'
             }}
           >
             <EstimateVisualization
