@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { MarketResearchResult } from '../utils/marketResearch';
 import { EstimateVisualization } from './EstimateVisualization';
 import { calculateTimeline } from '../utils/estimateEngine';
+import { calculateQuestionImpact } from '../utils/questionImpact';
 
 interface ProgressiveCardProps {
   // Basic fields
@@ -1506,7 +1507,7 @@ export function ProgressiveCard({
     const isCollapsed = collapsedSteps.has(stepIndex) && (currentStep === -1 || !isActive);
     const isHovered = hoveredStep === stepIndex;
     
-    // Collapsed view
+    // Collapsed view - show KPI metrics similar to research step
     if (isCollapsed && !isHovered && !isActive) {
       let displayValue = '';
       if (answer) {
@@ -1517,11 +1518,21 @@ export function ProgressiveCard({
         }
       }
       
+      // Calculate question impact for KPI display
+      const questionImpact = calculateQuestionImpact(
+        question.id,
+        answer || null,
+        answers,
+        question.text,
+        projectName,
+        projectContext
+      );
+      
       return (
         <div
           ref={(el) => { stepRefs.current[stepIndex] = el; }}
           key={question.id}
-          className="transition-all duration-300 ease-out flex items-center gap-3 min-w-0 w-full cursor-pointer group/item"
+          className="transition-all duration-300 ease-out w-full cursor-pointer group/item"
           onMouseEnter={() => setHoveredStep(stepIndex)}
           onMouseLeave={() => setHoveredStep(null)}
           onClick={(e) => {
@@ -1530,12 +1541,54 @@ export function ProgressiveCard({
             handleResetStep(stepIndex);
           }}
         >
-          <div className="flex-1 min-w-0 px-4 py-2 text-sm border-2 border-gray-200 rounded-xl bg-gray-50/50 hover:bg-gray-100 transition-colors">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-medium">{question.text}:</span>
-              <span className="text-gray-700 font-medium truncate ml-2">{displayValue}</span>
+          {/* Show KPI metrics if question has impact, otherwise show simple answer */}
+          {questionImpact.hasImpact && Math.abs(questionImpact.impactHours) > 0.1 ? (
+            <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 border-2 border-green-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">Q</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="text-sm font-bold text-gray-900 truncate">{question.text}</h4>
+                    {questionImpact.percentageChange !== 0 && (
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                        questionImpact.impactHours > 0 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {questionImpact.impactHours > 0 ? '+' : ''}{questionImpact.percentageChange.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {displayValue && (
+                    <p className="text-xs font-semibold text-gray-800 mb-1 truncate">
+                      {displayValue}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500">Impact:</span>
+                    <span className={`text-sm font-bold px-2 py-1 rounded ${
+                      questionImpact.impactHours > 0
+                        ? 'text-green-700 bg-green-100'
+                        : questionImpact.impactHours < 0
+                        ? 'text-blue-700 bg-blue-100'
+                        : 'text-gray-700 bg-gray-100'
+                    }`}>
+                      {questionImpact.impactHours > 0 ? '+' : ''}{Math.round(questionImpact.impactHours)}h
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex-1 min-w-0 px-4 py-2 text-sm border-2 border-gray-200 rounded-xl bg-gray-50/50 hover:bg-gray-100 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 text-xs font-medium truncate">{question.text}:</span>
+                <span className="text-gray-700 font-medium truncate ml-2">{displayValue || 'Not answered'}</span>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
