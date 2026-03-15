@@ -10,7 +10,11 @@ html, body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1e40af;
+  background-image: url('/assets/background-texture.png');
+  background-size: 100% auto;
+  background-position: top center;
+  background-repeat: repeat-y;
+  background-attachment: scroll;
   color: #1f2937;
   min-height: 100%;
   height: auto;
@@ -26,7 +30,6 @@ body {
 
 /* Portfolio-inspired styling */
 .portfolio-bg {
-  background-color: #1e40af;
   background-image: url('/assets/background-texture.png');
   background-size: 100% auto;
   background-position: top center;
