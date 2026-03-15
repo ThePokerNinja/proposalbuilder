@@ -748,10 +748,11 @@ export function EstimateVisualization({
   }
 
   return (
-    <div className="w-full">
-      <div className="relative group">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
-        <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
+    <div className="w-full flex justify-center">
+      <div className="w-full max-w-7xl mx-auto">
+        <div className="relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FFD700] via-blue-400 to-indigo-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+          <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl px-6 py-4 shadow-2xl border border-white/20 overflow-hidden w-full">
           {/* Header - Compact */}
           <div className="mb-6">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
@@ -1461,6 +1462,7 @@ export function EstimateVisualization({
           </div>
         </div>
       )}
+        </div>
       </div>
     </div>
   );
