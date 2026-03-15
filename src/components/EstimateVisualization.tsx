@@ -765,7 +765,7 @@ export function EstimateVisualization({
         style={{
           backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center calc(50% - 60px)',
+          backgroundPosition: 'center center',
           backgroundRepeat: 'no-repeat',
           minHeight: '150px'
         }}
