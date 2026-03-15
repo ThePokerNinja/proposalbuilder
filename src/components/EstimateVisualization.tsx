@@ -273,7 +273,9 @@ export function EstimateVisualization({
   }, [isSection1Open, isSection2Open, isSection3Open]);
   
   // Tab cycling state
-  const [tabCycleIndex, setTabCycleIndex] = useState(0); // 0 = Section 2, 1 = Section 3, 2 = Section 1
+  // 0 = Section 1, 1 = Section 2, 2 = Section 3
+  // Start at 0 (Section 1 open) so first Tab opens Section 2
+  const [tabCycleIndex, setTabCycleIndex] = useState(0);
   
   // Handle Tab key cycling between sections
   useEffect(() => {
@@ -282,26 +284,26 @@ export function EstimateVisualization({
       if (e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault();
         
-        // Cycle: 0 → 1 → 2 → 0 (Section 2 → Section 3 → Section 1 → Section 2)
+        // Cycle: 0 (Section 1) → 1 (Section 2) → 2 (Section 3) → 0 (Section 1)
         const nextIndex = (tabCycleIndex + 1) % 3;
         setTabCycleIndex(nextIndex);
         
         // Update section states based on cycle index
         if (nextIndex === 0) {
-          // Section 2
-          setIsSection2Open(true);
-          setIsSection1Open(false);
-          setIsSection3Open(false);
-        } else if (nextIndex === 1) {
-          // Section 3
-          setIsSection3Open(true);
-          setIsSection1Open(false);
-          setIsSection2Open(false);
-        } else {
           // Section 1
           setIsSection1Open(true);
           setIsSection2Open(false);
           setIsSection3Open(false);
+        } else if (nextIndex === 1) {
+          // Section 2 (first Tab press should open this)
+          setIsSection2Open(true);
+          setIsSection1Open(false);
+          setIsSection3Open(false);
+        } else {
+          // Section 3
+          setIsSection3Open(true);
+          setIsSection1Open(false);
+          setIsSection2Open(false);
         }
       }
     };
