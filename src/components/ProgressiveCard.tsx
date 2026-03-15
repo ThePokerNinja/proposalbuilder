@@ -1513,8 +1513,8 @@ export function ProgressiveCard({
     const isComplete = isStepComplete(stepIndex);
     const isHovered = hoveredStep === stepIndex;
     const isCollapsed = collapsedSteps.has(stepIndex) && (currentStep === -1 || !isActive);
-    // When estimate exists, always show collapsed view if question is complete
-    const shouldShowCollapsed = (isCollapsed && !isHovered && !isActive) || (estimate && isComplete && !isActive && !isHovered);
+    // When estimate exists, always show collapsed view for all questions (regardless of completion)
+    const shouldShowCollapsed = (isCollapsed && !isHovered && !isActive) || (estimate && !isActive && !isHovered);
     
     // Collapsed view
     if (shouldShowCollapsed) {
@@ -1542,22 +1542,26 @@ export function ProgressiveCard({
         >
           <div className="flex-1 min-w-0 px-4 py-2 text-sm border-2 border-gray-200 rounded-xl bg-gray-50/50 hover:bg-gray-100 transition-colors">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-medium">{question.text}:</span>
-              <span className="text-gray-700 font-medium truncate ml-2">{displayValue}</span>
+              <span className="text-gray-500 text-xs font-medium truncate">{question.text}:</span>
+              <span className="text-gray-700 font-medium truncate ml-2">{displayValue || 'Not answered'}</span>
             </div>
           </div>
         </div>
       );
     }
     
+    // When estimate exists, always show question (even if not complete)
+    const shouldShow = estimate || (isActive || focusedInput === stepIndex) || isComplete || visibleSteps.has(stepIndex);
     return (
       <div
         ref={(el) => { stepRefs.current[stepIndex] = el; }}
         key={question.id}
         className={`transition-all duration-500 ease-out flex items-center gap-3 min-w-0 w-full ${
-          (isActive || focusedInput === stepIndex)
+          !shouldShow
+            ? 'opacity-0 -translate-y-4 scale-95 pointer-events-none h-0 overflow-hidden'
+            : (isActive || focusedInput === stepIndex)
             ? 'opacity-100 translate-y-0 scale-100'
-            : isComplete
+            : isComplete || estimate
             ? 'opacity-60 translate-y-0 scale-[0.98]'
             : visibleSteps.has(stepIndex)
             ? 'opacity-100 translate-y-0 scale-100' // Show question if it's in visibleSteps
