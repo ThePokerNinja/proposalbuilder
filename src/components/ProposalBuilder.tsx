@@ -481,7 +481,7 @@ export function ProposalBuilder() {
   if (flowStep === 'intro') {
     return (
       <>
-      <div className="min-h-screen portfolio-bg pb-24 px-4 relative overflow-hidden">
+      <div className="min-h-screen portfolio-bg pb-24 px-4 relative overflow-hidden" style={{ marginLeft: '-200px', marginRight: '-200px', paddingLeft: '200px', paddingRight: '200px' }}>
         <TopBar />
 
         {/* Animated background elements */}
@@ -791,7 +791,7 @@ export function ProposalBuilder() {
 
     return (
       <>
-      <div className="min-h-screen portfolio-bg pb-12 px-4">
+      <div className="min-h-screen portfolio-bg pb-12 px-4" style={{ marginLeft: '-200px', marginRight: '-200px', paddingLeft: '200px', paddingRight: '200px' }}>
         <TopBar />
         <div className="max-w-5xl mx-auto pt-10">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 md:p-8 space-y-6">
@@ -968,7 +968,7 @@ export function ProposalBuilder() {
   if (showEstimate && estimate) {
     return (
       <>
-      <div className="min-h-screen portfolio-bg pb-12 px-4">
+      <div className="min-h-screen portfolio-bg pb-12 px-4" style={{ marginLeft: '-200px', marginRight: '-200px', paddingLeft: '200px', paddingRight: '200px' }}>
         <TopBar />
         <div className="max-w-6xl mx-auto pt-10">
           {/* Top actions row: Back, Start over, Export */}
@@ -1039,7 +1039,7 @@ export function ProposalBuilder() {
   if (flowStep === 'questions') {
     return (
       <>
-        <div className="min-h-screen portfolio-bg pb-12 px-4">
+        <div className="min-h-screen portfolio-bg pb-12 px-4" style={{ marginLeft: '-200px', marginRight: '-200px', paddingLeft: '200px', paddingRight: '200px' }}>
           <TopBar />
           <div className="max-w-6xl mx-auto pt-10">
             {/* Header Row - Full Width */}
@@ -1171,7 +1171,7 @@ export function ProposalBuilder() {
   // Default fallback - should never reach here, but ensures something renders
   return (
     <>
-      <div className="min-h-screen portfolio-bg py-12 px-4 flex items-center justify-center">
+      <div className="min-h-screen portfolio-bg py-12 px-4 flex items-center justify-center" style={{ marginLeft: '-200px', marginRight: '-200px', paddingLeft: '200px', paddingRight: '200px' }}>
         <div className="text-white text-center">
           <h2 className="text-2xl font-bold mb-4">Loading...</h2>
           <p className="text-white/70">Please wait while we prepare your proposal builder.</p>
