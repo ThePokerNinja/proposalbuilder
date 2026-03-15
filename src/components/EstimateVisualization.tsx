@@ -923,13 +923,17 @@ export function EstimateVisualization({
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
-              className="mb-8 rounded-xl p-5 shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+              className="mb-8 rounded-xl shadow-sm border border-portfolio-blue/20 relative overflow-hidden cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner.png')`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center center',
                 backgroundRepeat: 'no-repeat',
-                minHeight: '80px',
+                minHeight: '120px',
+                paddingTop: '24px',
+                paddingBottom: '24px',
+                paddingLeft: '20px',
+                paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
                 transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
               }}
@@ -1235,8 +1239,13 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 2 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
+              minHeight: '100px',
+              paddingTop: '28px',
+              paddingBottom: '28px',
+              paddingLeft: '20px',
+              paddingRight: '20px',
               opacity: isSection2Open ? 0 : 1,
               transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
             }}
@@ -1361,7 +1370,7 @@ export function EstimateVisualization({
         <div 
           className="transition-all duration-500 ease-in-out overflow-hidden"
           style={{
-            maxHeight: isSection3Open ? '5000px' : '80px',
+            maxHeight: isSection3Open ? '5000px' : '100px',
             opacity: isSection3Open ? 1 : 1,
           }}
         >
@@ -1466,8 +1475,13 @@ export function EstimateVisualization({
         ) : (
           /* Collapsed Section 3 - Show horizontal summary row */
           <div 
-            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer transition-all duration-500 ease-in-out hover:shadow-md"
             style={{
+              minHeight: '100px',
+              paddingTop: '28px',
+              paddingBottom: '28px',
+              paddingLeft: '20px',
+              paddingRight: '20px',
               opacity: isSection3Open ? 0 : 1,
               transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out'
             }}
