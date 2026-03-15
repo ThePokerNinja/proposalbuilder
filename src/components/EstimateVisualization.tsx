@@ -819,27 +819,39 @@ export function EstimateVisualization({
           <div 
             className="overflow-hidden"
             style={{
-              maxHeight: isSection1Open ? '5000px' : '50px',
-              opacity: isSection1Open ? 1 : 1,
-              transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
+              paddingTop: '24px',
+              paddingBottom: '24px',
+              marginTop: '-24px',
+              marginBottom: '-24px',
+            }}
+            onMouseEnter={() => {
+              // Immediately open Section 1
+              setIsSection1Open(true);
+              // Close other sections with a slight delay for smoother transition
+              setTimeout(() => {
+                setIsSection2Open(false);
+                setIsSection3Open(false);
+              }, 50);
+            }}
+            onMouseLeave={() => {
+              // Only close if not moving to another section (handled by their onMouseEnter)
+              // Add a small delay to allow smooth transition to next section
+              setTimeout(() => {
+                if (!isSection2Open && !isSection3Open) {
+                  setIsSection1Open(false);
+                }
+              }, 150);
             }}
           >
-          {isSection1Open ? (
             <div
-              onMouseLeave={(e) => {
-                // Check if mouse is moving below Section 1 (towards Section 2)
-                const rect = e.currentTarget.getBoundingClientRect();
-                const mouseY = e.clientY;
-                // If mouse is below the section, open Section 2 with smooth transition
-                if (mouseY > rect.bottom) {
-                  setIsSection2Open(true);
-                  setTimeout(() => {
-                    setIsSection1Open(false);
-                    setIsSection3Open(false);
-                  }, 50);
-                }
+              style={{
+                maxHeight: isSection1Open ? '5000px' : '50px',
+                opacity: isSection1Open ? 1 : 1,
+                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
+          {isSection1Open ? (
+            <div>
               {/* Header */}
               <div className="mb-6">
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 tracking-tight">Project Estimate</h2>
@@ -996,22 +1008,13 @@ export function EstimateVisualization({
               style={{
                 backgroundImage: `url('${import.meta.env.BASE_URL}assets/banner2.gif')`,
                 backgroundSize: '130%',
-                backgroundPosition: 'center 60%',
+                backgroundPosition: 'center calc(60% + 50px)',
                 backgroundRepeat: 'no-repeat',
                 minHeight: '50px',
                 paddingLeft: '20px',
                 paddingRight: '20px',
                 opacity: isSection1Open ? 0 : 1,
                 transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
-              }}
-              onMouseEnter={() => {
-                // Immediately open Section 1
-                setIsSection1Open(true);
-                // Close other sections with a slight delay for smoother transition
-                setTimeout(() => {
-                  setIsSection2Open(false);
-                  setIsSection3Open(false);
-                }, 50);
               }}
             >
               <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
@@ -1029,40 +1032,50 @@ export function EstimateVisualization({
               </div>
             </div>
           )}
+            </div>
           </div>
           {/* End Section 1 */}
 
-      {/* ============================================ */}
-      {/* SECTION 2: Resource Allocation (Adjust Task Hours + Task Hours Breakdown) */}
-      {/* ============================================ */}
-      <div 
-        className="mb-8"
-        style={{ paddingTop: '32px', marginTop: '-32px' }}
-        onMouseEnter={() => {
-          // Immediately open Section 2
-          setIsSection2Open(true);
-          // Close other sections with a slight delay for smoother transition
-          setTimeout(() => {
-            setIsSection1Open(false);
-            setIsSection3Open(false);
-          }, 50);
-        }}
-        onMouseLeave={() => {
-          setIsSection2Open(false);
-          // When Section 2 closes, open Section 1 with a slight delay for smoother transition
-          setTimeout(() => {
-            setIsSection1Open(true);
-          }, 100);
-        }}
-      >
-        <div 
-          className="overflow-hidden"
-          style={{
-            maxHeight: isSection2Open ? '5000px' : '50px',
-            opacity: isSection2Open ? 1 : 1,
-            transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
-          }}
-        >
+          {/* ============================================ */}
+          {/* SECTION 2: Resource Allocation (Adjust Task Hours + Task Hours Breakdown) */}
+          {/* ============================================ */}
+          <div 
+            className="mb-8"
+            style={{ 
+              paddingTop: '48px', 
+              paddingBottom: '48px',
+              marginTop: '-48px',
+              marginBottom: '-48px',
+            }}
+            onMouseEnter={() => {
+              // Immediately open Section 2
+              setIsSection2Open(true);
+              // Close other sections with a slight delay for smoother transition
+              setTimeout(() => {
+                setIsSection1Open(false);
+                setIsSection3Open(false);
+              }, 50);
+            }}
+            onMouseLeave={() => {
+              // Only close if not moving to another section (handled by their onMouseEnter)
+              // Add a small delay to allow smooth transition to next section
+              setTimeout(() => {
+                if (!isSection1Open && !isSection3Open) {
+                  setIsSection2Open(false);
+                  // When Section 2 closes, open Section 1
+                  setIsSection1Open(true);
+                }
+              }, 150);
+            }}
+          >
+            <div 
+              className="overflow-hidden"
+              style={{
+                maxHeight: isSection2Open ? '5000px' : '50px',
+                opacity: isSection2Open ? 1 : 1,
+                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
         {isSection2Open ? (
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
@@ -1347,9 +1360,9 @@ export function EstimateVisualization({
             </div>
           </div>
         )}
-        </div>
-      </div>
-      {/* End Section 2 */}
+            </div>
+          </div>
+          {/* End Section 2 */}
 
       {/* Add Task Modal */}
       {showAddTask && (
@@ -1425,36 +1438,46 @@ export function EstimateVisualization({
         </div>
       )}
 
-      {/* ============================================ */}
-      {/* SECTION 3: Project Milestones and Timeline & Calendar */}
-      {/* ============================================ */}
-      <div 
-        className="mb-8"
-        onMouseEnter={() => {
-          // Immediately open Section 3
-          setIsSection3Open(true);
-          // Close other sections with a slight delay for smoother transition
-          setTimeout(() => {
-            setIsSection1Open(false);
-            setIsSection2Open(false);
-          }, 50);
-        }}
-        onMouseLeave={() => {
-          setIsSection3Open(false);
-          // When Section 3 closes, open Section 1 with a slight delay for smoother transition
-          setTimeout(() => {
-            setIsSection1Open(true);
-          }, 100);
-        }}
-      >
-        <div 
-          className="overflow-hidden"
-          style={{
-            maxHeight: isSection3Open ? '5000px' : '50px',
-            opacity: isSection3Open ? 1 : 1,
-            transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease-in-out',
-          }}
-        >
+          {/* ============================================ */}
+          {/* SECTION 3: Project Milestones and Timeline & Calendar */}
+          {/* ============================================ */}
+          <div 
+            className="mb-8"
+            style={{ 
+              paddingTop: '48px', 
+              paddingBottom: '48px',
+              marginTop: '-48px',
+              marginBottom: '-48px',
+            }}
+            onMouseEnter={() => {
+              // Immediately open Section 3
+              setIsSection3Open(true);
+              // Close other sections with a slight delay for smoother transition
+              setTimeout(() => {
+                setIsSection1Open(false);
+                setIsSection2Open(false);
+              }, 50);
+            }}
+            onMouseLeave={() => {
+              // Only close if not moving to another section (handled by their onMouseEnter)
+              // Add a small delay to allow smooth transition to next section
+              setTimeout(() => {
+                if (!isSection1Open && !isSection2Open) {
+                  setIsSection3Open(false);
+                  // When Section 3 closes, open Section 1
+                  setIsSection1Open(true);
+                }
+              }, 150);
+            }}
+          >
+            <div 
+              className="overflow-hidden"
+              style={{
+                maxHeight: isSection3Open ? '5000px' : '50px',
+                opacity: isSection3Open ? 1 : 1,
+                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
         {isSection3Open ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Milestones Breakdown - Left Column */}
@@ -1591,9 +1614,9 @@ export function EstimateVisualization({
             </div>
           </div>
         )}
-        </div>
-      </div>
-      {/* End Section 3 */}
+            </div>
+          </div>
+          {/* End Section 3 */}
 
       {/* ============================================ */}
       {/* SECTION 4: Statement of Work, Download, and Send Preview */}
