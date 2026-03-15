@@ -1279,6 +1279,8 @@ export function ProgressiveCard({
     const isActive = currentStep === RESEARCH_STEP_INDEX;
     const isComplete = isStepComplete(RESEARCH_STEP_INDEX);
     const isCollapsed = collapsedSteps.has(RESEARCH_STEP_INDEX) && !isActive;
+    // When estimate exists, force collapsed view
+    const shouldShowCollapsed = (isCollapsed && !isActive) || (estimate && isComplete);
     const displayResearch = marketResearch || {
       marketSummary: 'Preparing market analysis...',
       competitiveLandscape: 'Evaluating competitive landscape...',
@@ -1290,11 +1292,17 @@ export function ProgressiveCard({
         uxElevationNeeded: 75,
         timelinePressure: 60,
       },
+      kpi: {
+        name: 'Project Success Score',
+        description: 'Measure overall project effectiveness and achievement of primary business objectives',
+        unit: 'score (0-100)',
+        exampleValue: '72-88 score'
+      }
     };
     
     // Collapsed view - show KPI by default
     // When estimate exists, show collapsed view if research is complete
-    if ((isCollapsed && !isActive) || (estimate && isComplete)) {
+    if (shouldShowCollapsed) {
       return (
         <div
           ref={(el) => { stepRefs.current[RESEARCH_STEP_INDEX] = el; }}
