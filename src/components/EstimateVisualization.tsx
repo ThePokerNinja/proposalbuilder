@@ -243,10 +243,48 @@ export function EstimateVisualization({
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
-  // Section collapse/expand state
-  const [isSection1Open, setIsSection1Open] = useState(true); // Default open
-  const [isSection2Open, setIsSection2Open] = useState(false); // Default closed
-  const [isSection3Open, setIsSection3Open] = useState(false); // Default closed
+  // Section collapse/expand state - Start with Section 2 open
+  const [isSection1Open, setIsSection1Open] = useState(false); // Start closed
+  const [isSection2Open, setIsSection2Open] = useState(true); // Start open
+  const [isSection3Open, setIsSection3Open] = useState(false); // Start closed
+  
+  // Tab cycling state
+  const [tabCycleIndex, setTabCycleIndex] = useState(0); // 0 = Section 2, 1 = Section 3, 2 = Section 1
+  
+  // Handle Tab key cycling between sections
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Tab key
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault();
+        
+        // Cycle: 0 → 1 → 2 → 0 (Section 2 → Section 3 → Section 1 → Section 2)
+        const nextIndex = (tabCycleIndex + 1) % 3;
+        setTabCycleIndex(nextIndex);
+        
+        // Update section states based on cycle index
+        if (nextIndex === 0) {
+          // Section 2
+          setIsSection2Open(true);
+          setIsSection1Open(false);
+          setIsSection3Open(false);
+        } else if (nextIndex === 1) {
+          // Section 3
+          setIsSection3Open(true);
+          setIsSection1Open(false);
+          setIsSection2Open(false);
+        } else {
+          // Section 1
+          setIsSection1Open(true);
+          setIsSection2Open(false);
+          setIsSection3Open(false);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tabCycleIndex]);
 
   // Generate initial summary, problem statement, and measures of success from answers + market research
   useEffect(() => {
