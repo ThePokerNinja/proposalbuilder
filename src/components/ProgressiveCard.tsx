@@ -33,6 +33,7 @@ interface ProgressiveCardProps {
   estimate: Estimate | null;
   setEstimate?: (estimate: Estimate | null) => void;
   onTaskMultiplierChange?: (taskId: string, multiplier: number) => void;
+  showEstimate?: boolean; // Only show estimate when this is true
   
   // Callbacks
   onGenerateEstimate: () => Estimate | null;
@@ -66,6 +67,7 @@ export function ProgressiveCard({
   onTaskMultiplierChange,
   onGenerateEstimate,
   onVoiceUpdate,
+  showEstimate = false,
 }: ProgressiveCardProps) {
   // Track which step we're on (0-4 = basic fields, 5 = research step, 6+ = discovery questions)
   // Start with -1 so no step is active by default
@@ -2017,12 +2019,12 @@ export function ProgressiveCard({
         }
       `}</style>
       
-      {/* Container: Two-column layout when estimate exists, single column otherwise */}
-      <div className={`w-full ${estimate ? 'flex flex-row flex-nowrap items-start justify-center' : ''}`} style={estimate ? { gap: '2%' } : {}}>
+      {/* Container: Two-column layout when estimate exists AND showEstimate is true, single column otherwise */}
+      <div className={`w-full ${(estimate && showEstimate) ? 'flex flex-row flex-nowrap items-start justify-center' : ''}`} style={(estimate && showEstimate) ? { gap: '2%' } : {}}>
         {/* Left Column: Cards and Button - Center-aligned with estimate */}
         <div 
-          className={estimate ? 'flex-shrink-0 flex flex-col' : 'w-full'}
-          style={estimate ? { 
+          className={(estimate && showEstimate) ? 'flex-shrink-0 flex flex-col' : 'w-full'}
+          style={(estimate && showEstimate) ? { 
             width: '30%',
             minWidth: '30%',
             maxWidth: '30%'
@@ -2399,7 +2401,7 @@ export function ProgressiveCard({
         </div>
         
         {/* Right Column: Estimate Visualization - Center-aligned with left column */}
-        {estimate && setEstimate ? (
+        {(estimate && showEstimate) && setEstimate ? (
           <div 
             className="flex-shrink-0"
             data-estimate-section

@@ -259,7 +259,8 @@ export function ProposalBuilder() {
   const generateEstimate = (): Estimate | null => {
     const newEstimate = createEstimate(answers, projectName, projectContext);
     setEstimate(newEstimate);
-    // Don't set showEstimate - let ProgressiveCard handle the layout with both cards and estimate
+    // Show the estimate screen when estimate is generated via "Generate Estimate" button
+    setShowEstimate(true);
     
     // Learn from this project to improve future predictions
     if (projectName.trim()) {
@@ -515,6 +516,7 @@ export function ProposalBuilder() {
             estimate={estimate}
             setEstimate={setEstimate}
             onTaskMultiplierChange={handleTaskMultiplierChange}
+            showEstimate={false}
             onRunResearch={() => {
               // Trigger research when moving from last basic field to research step
               if (projectName.trim()) {
