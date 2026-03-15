@@ -983,6 +983,7 @@ export function EstimateVisualization({
       {/* ============================================ */}
       <div 
         className="mb-8"
+        style={{ paddingTop: '32px', marginTop: '-32px' }}
         onMouseEnter={() => {
           // Immediately open Section 2
           setIsSection2Open(true);
