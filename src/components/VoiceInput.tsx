@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Room, RoomEvent, RemoteParticipant, LocalAudioTrack, RemoteAudioTrack, Track, createLocalAudioTrack } from 'livekit-client';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Room, RoomEvent, RemoteParticipant, LocalAudioTrack, RemoteAudioTrack, Track, createLocalAudioTrack, DisconnectReason, ConnectionQuality } from 'livekit-client';
 import { X } from 'lucide-react';
 
 interface VoiceInputProps {
@@ -10,8 +10,12 @@ interface VoiceInputProps {
     projectName?: string;
     projectSummary?: string;
   }) => void;
+  onQuestionAnswer?: (questionId: string, value: string | string[] | number) => void;
+  onFocusField?: (fieldIndex: number) => void;
+  onFocusQuestion?: (questionId: string) => void;
   onTranscript?: (text: string) => void;
   onError?: (error: Error) => void;
+  onConnectionStateChange?: (state: { isConnected: boolean; isConnecting: boolean; isListening: boolean }) => void;
   // High-level UI + proposal context so the agent can act as a senior guide
   agentContext?: {
     flowStep: 'intro' | 'research' | 'questions';
@@ -26,6 +30,8 @@ interface VoiceInputProps {
       currentIndex: number;
       currentId: string | null;
       currentText: string | null;
+      allIds?: string[];
+      allTexts?: { id: string; text: string }[];
     };
     answersSummary: {
       id: string;
@@ -56,9 +62,25 @@ interface TranscriptMessage {
   isFinal: boolean;
 }
 
-type AgentMessage = FormDataMessage | TranscriptMessage;
+interface QuestionAnswerMessage {
+  type: 'question_answer';
+  data: {
+    questionId: string;
+    value: string | string[] | number;
+  };
+}
 
-export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentContext }: VoiceInputProps) {
+interface FocusMessage {
+  type: 'focus';
+  data: {
+    field?: 'jobTitle' | 'projectCategory' | 'projectPriority' | 'projectName' | 'projectSummary';
+    questionId?: string;
+  };
+}
+
+type AgentMessage = FormDataMessage | TranscriptMessage | QuestionAnswerMessage | FocusMessage;
+
+export function VoiceInput({ onFormDataUpdate, onQuestionAnswer, onFocusField, onFocusQuestion, onTranscript, onError, agentContext, onConnectionStateChange }: VoiceInputProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -69,10 +91,25 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
   const remoteAudioTracksRef = useRef<Map<string, RemoteAudioTrack>>(new Map());
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  const [agentAudioTrack, setAgentAudioTrack] = useState<RemoteAudioTrack | null>(null);
+  const [_agentAudioTrack, setAgentAudioTrack] = useState<RemoteAudioTrack | null>(null);
   const [agentEnergy] = useState(0);
-  const [isAgentActive, setIsAgentActive] = useState(false);
+  const [, setIsAgentActive] = useState(false);
   const agentActivityTimeoutRef = useRef<number | null>(null);
+  const [imageReloadKey, setImageReloadKey] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Function to reload the agent-orb.gif image
+  const reloadAgentOrb = useCallback(() => {
+    setImageReloadKey(prev => prev + 1);
+  }, []);
+
+  // Expose reload function to window for manual reloading
+  useEffect(() => {
+    (window as any).__reloadAgentOrb = reloadAgentOrb;
+    return () => {
+      delete (window as any).__reloadAgentOrb;
+    };
+  }, [reloadAgentOrb]);
 
   // Mark the agent as visually active for a short window; refreshed on each event
   const markAgentActive = () => {
@@ -90,6 +127,12 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
   // knows where the user is and what they are looking at.
   const sendAgentContext = (context: VoiceInputProps['agentContext']) => {
     if (!roomRef.current || !context) return;
+    
+    // Only send if room is connected and local participant is ready
+    if (roomRef.current.state !== 'connected' || !roomRef.current.localParticipant) {
+      console.log('Room not ready for context publishing, will retry after connection');
+      return;
+    }
 
     try {
       const payload = {
@@ -149,11 +192,7 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
 
       roomRef.current = room;
 
-      // As soon as we have a room, send initial context so the agent
-      // understands what page/step the user is on.
-      if (agentContext) {
-        sendAgentContext(agentContext);
-      }
+      // Don't send context here - wait until room is connected
 
       // Listen for data messages from agent (transcripts + structured form data)
       room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
@@ -169,6 +208,40 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
             if (msg.data.projectName || msg.data.projectSummary) {
               setTranscript('');
             }
+            return;
+          }
+
+          // Handle question answer updates from agent
+          if ((parsed as AgentMessage).type === 'question_answer') {
+            const msg = parsed as QuestionAnswerMessage;
+            if (onQuestionAnswer) {
+              onQuestionAnswer(msg.data.questionId, msg.data.value);
+            }
+            console.log('Question answered:', msg.data.questionId, msg.data.value);
+            return;
+          }
+
+          // Handle focus messages from agent (which field/question to highlight)
+          if ((parsed as AgentMessage).type === 'focus') {
+            const msg = parsed as FocusMessage;
+            if (msg.data.field && onFocusField) {
+              // Map field names to indices: 0=jobTitle, 1=projectCategory, 2=projectPriority, 3=projectName, 4=projectSummary
+              const fieldMap: Record<string, number> = {
+                'jobTitle': 0,
+                'projectCategory': 1,
+                'projectPriority': 2,
+                'projectName': 3,
+                'projectSummary': 4,
+              };
+              const fieldIndex = fieldMap[msg.data.field];
+              if (fieldIndex !== undefined) {
+                onFocusField(fieldIndex);
+              }
+            }
+            if (msg.data.questionId && onFocusQuestion) {
+              onFocusQuestion(msg.data.questionId);
+            }
+            console.log('Agent focusing on:', msg.data);
             return;
           }
 
@@ -214,15 +287,84 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
       // Listen for remote participants (the agent)
       room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
         console.log('Agent connected:', participant.identity);
+        markAgentActive();
       });
 
-      // Log disconnect reasons
+      // Listen for participant disconnection
+      room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+        console.log('Agent disconnected:', participant.identity);
+        // Clean up tracks from this participant
+        participant.trackPublications.forEach((pub) => {
+          if (pub.track) {
+            pub.track.detach();
+            if (pub.trackSid) {
+              remoteAudioTracksRef.current.delete(pub.trackSid);
+            }
+          }
+        });
+        setAgentAudioTrack(null);
+      });
+
+      // Handle disconnection events
       room.on(RoomEvent.Disconnected, (reason) => {
         console.log('LiveKit room disconnected, reason:', reason);
+        console.log('Disconnect details:', { 
+          reason, 
+          wasConnected: isConnected, 
+          wasListening: isListening,
+          roomState: room.state 
+        });
+        
+        // Update state when room disconnects (could be server-side, network, or error)
+        setIsConnected(false);
+        setIsListening(false);
+        setIsConnecting(false);
+        setAgentAudioTrack(null);
+        // Notify parent of connection state change
+        if (onConnectionStateChange) {
+          onConnectionStateChange({ isConnected: false, isConnecting: false, isListening: false });
+        }
+        
+        // Clean up audio tracks
+        remoteAudioTracksRef.current.forEach((track) => {
+          track.detach();
+        });
+        remoteAudioTracksRef.current.clear();
+        
+        // Clean up audio element
+        if (audioElementRef.current) {
+          audioElementRef.current.pause();
+          audioElementRef.current.srcObject = null;
+          if (audioElementRef.current.parentNode) {
+            audioElementRef.current.parentNode.removeChild(audioElementRef.current);
+          }
+          audioElementRef.current = null;
+        }
+        
+        // Show error if it was an unexpected disconnect (not user-initiated)
+        if (reason && reason !== DisconnectReason.CLIENT_INITIATED) {
+          const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
+          setError(`Connection lost: ${reasonText}. The agent may have encountered an error. Please try connecting again.`);
+        }
+      });
+      
+      // Listen for room errors
+      room.on(RoomEvent.RoomMetadataChanged, (metadata) => {
+        console.log('Room metadata changed:', metadata);
+      });
+      
+      // Listen for connection quality changes (might indicate issues)
+      room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        if (participant && participant !== room.localParticipant) {
+          console.log('Agent connection quality:', quality, participant.identity);
+          if (quality === ConnectionQuality.Poor || quality === ConnectionQuality.Lost) {
+            console.warn('Agent connection quality is poor, connection may be unstable');
+          }
+        }
       });
 
       // Listen for remote tracks (agent's audio)
-      room.on(RoomEvent.TrackSubscribed, (track) => {
+      room.on(RoomEvent.TrackSubscribed, async (track) => {
         console.log('Track subscribed:', track.kind);
 
         if (track.kind === Track.Kind.Audio && track instanceof RemoteAudioTrack) {
@@ -237,11 +379,39 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
           if (!audioElementRef.current) {
             audioElementRef.current = document.createElement('audio');
             audioElementRef.current.autoplay = true;
+            audioElementRef.current.setAttribute('playsinline', 'true');
+            audioElementRef.current.setAttribute('preload', 'auto');
             document.body.appendChild(audioElementRef.current);
           }
           
           // Attach track to audio element
           track.attach(audioElementRef.current);
+          
+          // Ensure audio plays (browsers may block autoplay)
+          try {
+            if (audioElementRef.current.paused) {
+              await audioElementRef.current.play();
+              console.log('Agent audio playback started');
+            }
+          } catch (err) {
+            console.warn('Audio autoplay blocked, user interaction required:', err);
+            // Try to play on next user interaction
+            const playOnInteraction = async () => {
+              try {
+                if (audioElementRef.current && audioElementRef.current.paused) {
+                  await audioElementRef.current.play();
+                  console.log('Agent audio playback started after user interaction');
+                }
+              } catch (e) {
+                console.error('Failed to play audio after interaction:', e);
+              }
+              document.removeEventListener('click', playOnInteraction);
+              document.removeEventListener('touchstart', playOnInteraction);
+            };
+            document.addEventListener('click', playOnInteraction, { once: true });
+            document.addEventListener('touchstart', playOnInteraction, { once: true });
+          }
+          
           console.log('Agent audio track attached to audio element');
         }
       });
@@ -258,17 +428,41 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
       });
 
       // Connect to room
+      console.log('Connecting to LiveKit room...');
       await room.connect(url, token);
+      console.log('Successfully connected to LiveKit room');
       setIsConnected(true);
       setIsConnecting(false);
 
+      // Send initial context now that room is connected
+      if (agentContext) {
+        // Small delay to ensure connection is fully established
+        setTimeout(() => {
+          sendAgentContext(agentContext);
+        }, 100);
+      }
+
       // Enable microphone
+      console.log('Starting microphone...');
       await startListening();
+      console.log('Microphone started, ready for conversation');
     } catch (err) {
       console.error('Error connecting to LiveKit:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect to voice service';
       setError(errorMessage);
       setIsConnecting(false);
+      setIsConnected(false);
+      
+      // Clean up on connection failure
+      if (roomRef.current) {
+        try {
+          await roomRef.current.disconnect();
+        } catch (disconnectErr) {
+          console.warn('Error disconnecting after failed connection:', disconnectErr);
+        }
+        roomRef.current = null;
+      }
+      
       if (onError) {
         onError(err instanceof Error ? err : new Error(errorMessage));
       }
@@ -419,15 +613,51 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
 
   // Connect on click (one-way; disconnect handled elsewhere if needed)
   const handleToggleConnection = async () => {
-    console.log('Button clicked, current state:', { isConnected, isConnecting, isDisconnecting });
+    console.log('=== handleToggleConnection CALLED ===', { 
+      isConnected, 
+      isConnecting, 
+      isDisconnecting, 
+      roomState: roomRef.current?.state,
+      connectToRoomExists: typeof connectToRoom === 'function'
+    });
 
-    if (isConnected || isConnecting || isDisconnecting) {
+    // Only prevent if actively connecting or disconnecting
+    if (isConnecting || isDisconnecting) {
+      console.log('Blocked: already connecting or disconnecting');
       return;
     }
 
-    connectToRoom().catch((err) => {
+    // If connected, allow disconnect
+    if (isConnected) {
+      console.log('Disconnecting...');
+      try {
+        await disconnect();
+        console.log('Disconnected successfully');
+      } catch (err) {
+        console.error('Error in disconnect:', err);
+      }
+      return;
+    }
+
+    // Otherwise, connect
+    console.log('Connecting...');
+    if (typeof connectToRoom !== 'function') {
+      console.error('connectToRoom is not a function!', connectToRoom);
+      alert('Connection function not available. Please refresh the page.');
+      return;
+    }
+    try {
+      setIsConnecting(true);
+      console.log('Calling connectToRoom...');
+      await connectToRoom();
+      console.log('Connection successful!');
+    } catch (err) {
       console.error('Error in connect:', err);
-    });
+      setIsConnecting(false);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('Connection error details:', errorMsg);
+      alert(`Failed to connect: ${errorMsg}`);
+    }
   };
 
   if (error) {
@@ -458,106 +688,140 @@ export function VoiceInput({ onFormDataUpdate, onTranscript, onError, agentConte
   }
 
   // Determine agent state: speaking (has audio track) vs listening (connected but not speaking)
-  const isAgentSpeaking = isConnected && agentAudioTrack !== null;
+  // const isAgentSpeaking = isConnected && agentAudioTrack !== null; // Reserved for future use
+  
+  // Determine agent state: speaking (has audio track) vs listening (connected but not speaking)
+  // const isAgentSpeaking = isConnected && agentAudioTrack !== null; // Reserved for future use
   
   // Keep a subtle scale effect when connected.
   const popScale = isConnected ? 1 + agentEnergy * 0.4 : 1;
+  
+  // Expose connection state to parent for status display
+  // Use refs to track previous values and only update when they actually change
+  const prevStateRef = useRef({ isConnected, isConnecting, isListening });
+  useEffect(() => {
+    const prevState = prevStateRef.current;
+    const hasChanged = 
+      prevState.isConnected !== isConnected ||
+      prevState.isConnecting !== isConnecting ||
+      prevState.isListening !== isListening;
+    
+    if (hasChanged && onConnectionStateChange) {
+      prevStateRef.current = { isConnected, isConnecting, isListening };
+      onConnectionStateChange({ 
+        isConnected, 
+        isConnecting, 
+        isListening 
+      });
+    }
+  }, [isConnected, isConnecting, isListening, onConnectionStateChange]);
 
   // Mark functions as used to avoid TypeScript errors (kept for potential future use)
   void stopListening;
   void disconnect;
 
   return (
-    <div className="relative z-50 w-full flex justify-center group pointer-events-auto">
-      {/* Dramatic white light hover effect behind agent */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center -z-10">
-        <div
-          className="w-56 h-56 rounded-full bg-white blur-3xl opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-110 transition-all duration-500"
-          style={{
-            boxShadow: '0 0 80px rgba(255,255,255,0.95), 0 0 140px rgba(255,255,255,0.8), 0 0 200px rgba(255,255,255,0.6)',
-          }}
-        />
-      </div>
-      <div
-        className="relative z-10 p-0 w-80 h-80 flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-150 pointer-events-auto bg-transparent border-none shadow-none"
+    <div className="relative z-[100] w-full flex justify-center">
+      <button
+        type="button"
+        className="relative w-80 h-80 flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-150 border-0 bg-transparent p-0"
         style={{ transform: `scale(${popScale})` }}
-        onClick={() => {
-          if (isConnecting || isDisconnecting) return;
-          handleToggleConnection();
+        onClick={(e) => {
+          console.log('=== CLICK DETECTED ON AGENT ORB ===', { 
+            isConnected, 
+            isConnecting, 
+            isDisconnecting,
+            target: e.target,
+            currentTarget: e.currentTarget,
+            handleToggleConnectionType: typeof handleToggleConnection
+          });
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('Calling handleToggleConnection...');
+          if (typeof handleToggleConnection === 'function') {
+            handleToggleConnection();
+          } else {
+            console.error('handleToggleConnection is not a function!', handleToggleConnection);
+          }
         }}
+        onMouseEnter={() => {
+          console.log('Mouse enter on agent orb');
+          setIsHovered(true);
+        }}
+        onMouseLeave={() => {
+          console.log('Mouse leave on agent orb');
+          setIsHovered(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggleConnection();
+          }
+        }}
+        aria-label="Connect to voice agent"
       >
+        {/* Dramatic white light hover effect behind agent - glow only, no ring */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-0">
+          <div
+            className={`w-56 h-56 rounded-full bg-white blur-3xl transition-all duration-500 ${
+              isHovered ? 'opacity-100 scale-110' : 'opacity-0 scale-95'
+            }`}
+            style={{
+              boxShadow: isHovered 
+                ? '0 0 80px rgba(255,255,255,0.95), 0 0 140px rgba(255,255,255,0.8), 0 0 200px rgba(255,255,255,0.6)'
+                : 'none',
+            }}
+          />
+        </div>
 
         {/* Visualizer – ALWAYS show the provided agent GIF inside a circular mask */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div
-            className={`relative w-40 h-40 rounded-full overflow-hidden ${
-              isConnected && isAgentActive
-                ? isAgentSpeaking
-                  ? 'agent-pulse-fast agent-strobe-yellow'
-                  : 'agent-pulse-fast agent-strobe-blue'
-                : ''
-            }`}
-          >
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="relative w-40 h-40 rounded-full overflow-hidden pointer-events-none">
             <img
-              src={`${import.meta.env.BASE_URL}assets/agent-orb.gif`}
+              key={imageReloadKey}
+              src={`${import.meta.env.BASE_URL}assets/agent-orb2.gif${imageReloadKey > 0 ? `?v=${imageReloadKey}` : ''}`}
               alt="Agent active animation"
-              className="w-full h-full object-cover transform scale-[1.5]"
+              className="w-full h-full object-cover transform scale-[1.5] pointer-events-none"
+              draggable={false}
+              style={{ pointerEvents: 'none', userSelect: 'none' }}
+              onError={() => {
+                // Force reload on error
+                setImageReloadKey(prev => prev + 1);
+              }}
             />
           </div>
-
-          {/* Strobe + pulse animations for agent states */}
-          <style>{`
-            @keyframes strobeYellow {
-              0%, 100% {
-                box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,255,0,0.6), 0 0 60px rgba(255,215,0,0.4);
-              }
-              50% {
-                box-shadow: 0 0 50px rgba(255,215,0,1), 0 0 100px rgba(255,255,0,0.9), 0 0 150px rgba(255,215,0,0.7);
-              }
-            }
-            @keyframes strobeBlue {
-              0%, 100% {
-                box-shadow: 0 0 20px rgba(59,130,246,0.8), 0 0 40px rgba(37,99,235,0.6), 0 0 60px rgba(59,130,246,0.4);
-              }
-              50% {
-                box-shadow: 0 0 50px rgba(59,130,246,1), 0 0 100px rgba(37,99,235,0.9), 0 0 150px rgba(59,130,246,0.7);
-              }
-            }
-            .agent-strobe-yellow {
-              animation: strobeYellow 0.6s ease-in-out infinite;
-            }
-            .agent-strobe-blue {
-              animation: strobeBlue 0.6s ease-in-out infinite;
-            }
-            @keyframes pulseFast {
-              0% {
-                transform: scale(0.9);
-              }
-              50% {
-                transform: scale(1.1);
-              }
-              100% {
-                transform: scale(0.9);
-              }
-            }
-            .agent-pulse-fast {
-              animation: pulseFast 0.25s ease-in-out infinite;
-            }
-          `}</style>
         </div>
 
         {/* Logo centered on top of sphere / black hole – no radial ring or white border */}
         <img
           src={`${import.meta.env.BASE_URL}assets/logo.png`}
           alt="Logo"
-          className="relative h-40 w-40 object-contain pointer-events-none"
+          className="relative z-20 h-40 w-40 object-contain pointer-events-none"
+          draggable={false}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
           }}
         />
 
+        {/* Connection Status Indicator */}
+        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-0.5 pointer-events-none">
+          {isConnecting && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/90 backdrop-blur-sm rounded-full text-white text-xs font-medium shadow-lg">
+              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+              <span>Connecting...</span>
+            </div>
+          )}
+          {isConnected && !isConnecting && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/90 backdrop-blur-sm rounded-full text-white text-xs font-medium shadow-lg">
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <span>Connected</span>
+            </div>
+          )}
+        </div>
+
         {/* No visible button – entire sphere is the click target */}
-      </div>
+      </button>
     </div>
   );
 }

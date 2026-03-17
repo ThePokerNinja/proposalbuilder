@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "node server.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "dev:python": "python agent/main.py dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\" \"npm run dev:python\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start": "node server-production.js",

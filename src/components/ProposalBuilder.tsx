@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Question, Answer, Estimate } from '../types';
 import { QUESTIONS } from '../config/questions';
 import { createEstimate, calculateTimeline } from '../utils/estimateEngine';
@@ -49,6 +49,18 @@ export function ProposalBuilder() {
   const analysisTimeoutRef = useRef<number | null>(null);
   const [taglineMessageIndex, setTaglineMessageIndex] = useState(0);
   const [typedTagline, setTypedTagline] = useState('');
+  // Agent connection state for status display
+  const [agentConnectionState, setAgentConnectionState] = useState<{ isConnected: boolean; isConnecting: boolean; isListening: boolean }>({
+    isConnected: false,
+    isConnecting: false,
+    isListening: false,
+  });
+  // Focus state to sync agent with UI
+  const [focusFieldIndex, setFocusFieldIndex] = useState<number | null>(null);
+  const [focusQuestionId, setFocusQuestionId] = useState<string | null>(null);
+  // Track if user has manually advanced past research (for agent context)
+  // Must be declared early to avoid initialization order issues
+  const [hasAdvancedPastResearch, setHasAdvancedPastResearch] = useState(false);
 
   // Generate personalized questions when project name/summary is available
   // Update questions dynamically as answers come in to filter irrelevant ones
@@ -61,21 +73,43 @@ export function ProposalBuilder() {
 
   // Use personalized questions if available, otherwise fall back to default
   const questions = personalizedQuestions.length > 0 ? personalizedQuestions : QUESTIONS;
-  const currentQuestion = questions[currentQuestionIndex];
+  
+  // Calculate current question for agent context when using ProgressiveCard
+  // When user has advanced past research, find the first unanswered question
+  const currentQuestionForAgent = useMemo(() => {
+    if (hasAdvancedPastResearch && questions.length > 0) {
+      // Find first unanswered question
+      const answeredIds = new Set(answers.map(a => a.questionId));
+      const firstUnanswered = questions.find(q => !answeredIds.has(q.id));
+      if (firstUnanswered) {
+        return firstUnanswered;
+      }
+      // If all answered, return the last question
+      return questions[questions.length - 1];
+    }
+    // Fall back to old flow for backwards compatibility
+    return questions[currentQuestionIndex];
+  }, [hasAdvancedPastResearch, questions, answers, currentQuestionIndex]);
+  
+  const currentQuestion = currentQuestionForAgent;
   const currentAnswer = answers.find((a) => a.questionId === currentQuestion?.id);
+  const currentQuestionIndexForAgent = currentQuestion ? questions.findIndex(q => q.id === currentQuestion.id) : -1;
   const learningData = useMemo(() => getLearningData(), []);
 
   // High-level context we can stream to the voice agent so it always knows
   // where the user is in the flow and what the current proposal looks like.
   const agentContext = useMemo(() => ({
-    flowStep,
+    // Use 'questions' flowStep for agent context when user has advanced past research
+    // This tells the agent to start asking discovery questions
+    // But we keep flowStep as 'intro' in UI so ProgressiveCard continues to render
+    flowStep: hasAdvancedPastResearch && questions.length > 0 ? 'questions' : flowStep,
     pageTitle:
-      flowStep === 'intro'
+      hasAdvancedPastResearch && questions.length > 0
+        ? 'Discovery Questions'
+        : flowStep === 'intro'
         ? 'Project Overview'
         : flowStep === 'research'
         ? 'Market Research'
-        : flowStep === 'questions'
-        ? 'Discovery Questions'
         : 'Proposal Builder',
     projectName,
     projectSummary: projectContext,
@@ -84,9 +118,11 @@ export function ProposalBuilder() {
     projectPriority,
     questions: {
       total: questions.length,
-      currentIndex: currentQuestionIndex + 1,
+      currentIndex: currentQuestionIndexForAgent >= 0 ? currentQuestionIndexForAgent + 1 : 0,
       currentId: currentQuestion?.id ?? null,
       currentText: currentQuestion?.text ?? null,
+      allIds: questions.map(q => q.id), // All question IDs so agent can send focus for any question
+      allTexts: questions.map(q => ({ id: q.id, text: q.text })), // All questions with IDs and texts
     },
     answersSummary: answers.map((a) => ({
       id: a.questionId,
@@ -99,14 +135,36 @@ export function ProposalBuilder() {
         }
       : null,
     showEstimate,
-  }), [flowStep, projectName, projectContext, jobTitle, projectCategory, projectPriority, questions.length, currentQuestionIndex, currentQuestion, answers, estimate, showEstimate]);
+  }), [flowStep, hasAdvancedPastResearch, projectName, projectContext, jobTitle, projectCategory, projectPriority, questions, currentQuestionIndexForAgent, currentQuestionForAgent, answers, estimate, showEstimate]);
 
   // Sticky top bar with voice agent + animated tagline
   const TopBar = () => (
-    <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-auto">
-      <div className="max-w-5xl mx-auto flex flex-col items-center gap-4">
+    <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-gradient-to-b from-[#020617]/95 via-[#020617]/90 to-transparent backdrop-blur-xl border-b border-white/10 pointer-events-none">
+      <div className="max-w-5xl mx-auto flex flex-col items-center gap-4 pointer-events-auto">
         <VoiceInput
           onFormDataUpdate={handleVoiceFormDataUpdate}
+          onQuestionAnswer={(questionId, value) => {
+            setAnswers(prev => {
+              const filtered = prev.filter(a => a.questionId !== questionId);
+              return [...filtered, { questionId, value }];
+            });
+            // Auto-advance to next question when agent answers (agent will send focus for next question)
+            // The focus message from agent will handle the UI advancement
+          }}
+          onFocusField={(fieldIndex) => {
+            setFocusFieldIndex(fieldIndex);
+            setFocusQuestionId(null);
+            setCurrentQuestionIndex(-1);
+          }}
+          onFocusQuestion={(questionId) => {
+            setFocusQuestionId(questionId);
+            setFocusFieldIndex(null);
+            const allQuestions = personalizedQuestions.length > 0 ? personalizedQuestions : QUESTIONS;
+            const questionIndex = allQuestions.findIndex(q => q.id === questionId);
+            if (questionIndex !== -1) {
+              setCurrentQuestionIndex(questionIndex);
+            }
+          }}
           onTranscript={(text) => {
             setAgentTranscriptHistory(prev => [...prev, text]);
           }}
@@ -114,11 +172,16 @@ export function ProposalBuilder() {
             console.error('Voice input error:', error);
           }}
           agentContext={agentContext}
+          onConnectionStateChange={setAgentConnectionState}
         />
+        {/* Agent Status or Tagline - uses same visual treatment */}
         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white/80 text-[10px] font-medium tracking-wide">
           <Sparkles className="w-3 h-3 text-[#FFD700]" />
           <span className="whitespace-nowrap">
-            {typedTagline || TAGLINE_MESSAGES[taglineMessageIndex]}
+            {agentConnectionState.isConnected || agentConnectionState.isConnecting
+              ? (agentStatusText || getAgentStatusText())
+              : (typedTagline || TAGLINE_MESSAGES[taglineMessageIndex])
+            }
           </span>
         </span>
       </div>
@@ -452,8 +515,53 @@ export function ProposalBuilder() {
     };
   }, [estimate, answers, projectName, projectContext]);
 
-  // Typewriter effect for tagline, cycling between two messages
+  // Agent status text based on connection state
+  const getAgentStatusText = useCallback(() => {
+    if (agentConnectionState.isConnecting) {
+      return 'Connecting...';
+    }
+    if (agentConnectionState.isConnected && agentConnectionState.isListening) {
+      return 'Connected • Listening';
+    }
+    if (agentConnectionState.isConnected) {
+      return 'Connected';
+    }
+    return '';
+  }, [agentConnectionState.isConnected, agentConnectionState.isConnecting, agentConnectionState.isListening]);
+
+  // Typewriter effect for agent status (only when connected/connecting)
+  const [agentStatusText, setAgentStatusText] = useState('');
+  const prevStatusTextRef = useRef('');
   useEffect(() => {
+    const fullText = getAgentStatusText();
+    
+    // Only animate if status text actually changed (not just the displayed portion)
+    if (fullText !== prevStatusTextRef.current) {
+      prevStatusTextRef.current = fullText;
+      setAgentStatusText('');
+      
+      // Type out the new status
+      let currentIndex = 0;
+      const typeInterval = setInterval(() => {
+        if (currentIndex < fullText.length) {
+          setAgentStatusText(fullText.slice(0, currentIndex + 1));
+          currentIndex++;
+        } else {
+          clearInterval(typeInterval);
+        }
+      }, 45); // typing speed
+      
+      return () => clearInterval(typeInterval);
+    }
+  }, [getAgentStatusText]);
+
+  // Typewriter effect for tagline, cycling between two messages (only when not connected)
+  useEffect(() => {
+    // Don't show tagline animation when agent is connected
+    if (agentConnectionState.isConnected || agentConnectionState.isConnecting) {
+      return;
+    }
+    
     const fullText = TAGLINE_MESSAGES[taglineMessageIndex];
 
     // Still typing current message
@@ -472,7 +580,7 @@ export function ProposalBuilder() {
     }, 2200);
 
     return () => window.clearTimeout(pauseId);
-  }, [typedTagline, taglineMessageIndex]);
+  }, [typedTagline, taglineMessageIndex, agentConnectionState.isConnected, agentConnectionState.isConnecting]);
 
   // REMOVED: Separate estimate screen - ProgressiveCard now handles showing both cards and estimate together in a two-column layout
 
@@ -531,6 +639,14 @@ export function ProposalBuilder() {
             }}
             onGenerateEstimate={generateEstimate}
             onVoiceUpdate={handleVoiceFormDataUpdate}
+            onResearchAdvanced={() => {
+              // Mark that user has advanced past research for agent context
+              // But don't change flowStep - ProgressiveCard handles questions internally with vertical cards
+              // flowStep stays as 'intro' so ProgressiveCard continues to render
+              setHasAdvancedPastResearch(true);
+            }}
+            focusFieldIndex={focusFieldIndex}
+            focusQuestionId={focusQuestionId}
           />
 
 

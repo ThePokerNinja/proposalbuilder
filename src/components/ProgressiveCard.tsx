@@ -43,6 +43,11 @@ interface ProgressiveCardProps {
     projectName?: string;
     projectSummary?: string;
   }) => void;
+  onFocusField?: (fieldIndex: number) => void;
+  onFocusQuestion?: (questionId: string) => void;
+  focusFieldIndex?: number | null;
+  focusQuestionId?: string | null;
+  onResearchAdvanced?: () => void; // Callback when user advances past research
 }
 
 export function ProgressiveCard({
@@ -66,6 +71,9 @@ export function ProgressiveCard({
   onTaskMultiplierChange,
   onGenerateEstimate,
   onVoiceUpdate,
+  focusFieldIndex,
+  focusQuestionId,
+  onResearchAdvanced,
 }: ProgressiveCardProps) {
   // Track which step we're on (0-4 = basic fields, 5 = research step, 6+ = discovery questions)
   // Start with -1 so no step is active by default
@@ -200,6 +208,12 @@ export function ProgressiveCard({
         isStepComplete(RESEARCH_STEP_INDEX) && 
         nextStep > RESEARCH_STEP_INDEX && 
         questions.length > 0) {
+      // Mark that user has manually advanced past research
+      hasManuallyAdvancedPastResearch.current = true;
+      // Notify parent that research has been advanced
+      if (onResearchAdvanced) {
+        onResearchAdvanced();
+      }
       // Show card only after we've moved past research step (research is now collapsed)
       // Use a small delay to ensure state updates have propagated
       createTimeout(() => {
@@ -434,9 +448,13 @@ export function ProgressiveCard({
   }, [collapsedSteps, currentStep, questions.length, marketResearch, estimate, questions]); // Dependencies for visibility logic
   
   // Handle voice updates - open dropdowns when values come from voice
+  const prevCategoryRef = useRef<string>('');
+  const prevPriorityRef = useRef<string>('');
+  
   useEffect(() => {
-    // If projectCategory gets a value from voice, open its dropdown briefly then close
-    if (projectCategory && !openDropdowns.has(1)) {
+    // Only update if the value actually changed (not just on every render)
+    if (projectCategory && projectCategory !== prevCategoryRef.current) {
+      prevCategoryRef.current = projectCategory;
       // Value was set, ensure dropdown is closed
       setOpenDropdowns(prev => {
         const next = new Set(prev);
@@ -445,14 +463,110 @@ export function ProgressiveCard({
       });
     }
     // Same for priority
-    if (projectPriority && !openDropdowns.has(2)) {
+    if (projectPriority && projectPriority !== prevPriorityRef.current) {
+      prevPriorityRef.current = projectPriority;
       setOpenDropdowns(prev => {
         const next = new Set(prev);
         next.delete(2);
         return next;
       });
     }
-  }, [projectCategory, projectPriority, openDropdowns]);
+  }, [projectCategory, projectPriority]); // Removed openDropdowns from dependencies
+
+  // Auto-advance to research when all basic fields are complete
+  useEffect(() => {
+    // Check if all basic fields are complete
+    const allBasicComplete = BASIC_STEPS.every((_, idx) => isStepComplete(idx));
+    
+    // If all basic fields are complete and we're still on a basic field (not yet at research)
+    if (allBasicComplete && currentStep < RESEARCH_STEP_INDEX && currentStep >= 0) {
+      console.log('All basic fields complete, auto-advancing to research');
+      // Auto-advance to research step
+      if (onRunResearch) {
+        onRunResearch();
+      }
+      // Advance to research step after a short delay to ensure research is generated
+      setTimeout(() => {
+        setCurrentStep(RESEARCH_STEP_INDEX);
+        setVisibleSteps(prev => new Set([...prev, RESEARCH_STEP_INDEX]));
+        setCollapsedSteps(prev => {
+          const next = new Set(prev);
+          next.delete(RESEARCH_STEP_INDEX);
+          return next;
+        });
+      }, 200);
+    }
+  }, [jobTitle, projectCategory, projectPriority, projectName, projectContext, currentStep, onRunResearch]);
+
+  // Track if user has manually advanced past research (not via agent focus)
+  const hasManuallyAdvancedPastResearch = useRef(false);
+
+  // Update flowStep when advancing past research - only when manually advanced via handleNext
+  // Note: onResearchAdvanced is now called directly in handleNext() when user manually advances
+  // This effect is kept for potential future use but doesn't trigger onResearchAdvanced
+
+  // Handle focus from agent - sync UI with agent's current question
+  // Watch focusFieldIndex and focusQuestionId props to update UI when agent focuses
+  const prevFocusFieldIndexRef = useRef<number | null>(null);
+  const prevFocusQuestionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (focusFieldIndex === null || focusFieldIndex === undefined) return;
+    if (focusFieldIndex === prevFocusFieldIndexRef.current) return;
+    
+    prevFocusFieldIndexRef.current = focusFieldIndex;
+    const index = typeof focusFieldIndex === 'number' ? focusFieldIndex : -1;
+    if (index < 0) return;
+    
+    setCurrentStep(index);
+    setVisibleSteps(prev => new Set([...prev, index]));
+    setCollapsedSteps(prev => {
+      const next = new Set<number>(prev);
+      next.delete(index);
+      return next;
+    });
+    setTimeout(() => {
+      const input = inputRefs.current[index];
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  }, [focusFieldIndex]);
+
+  useEffect(() => {
+    if (focusQuestionId && focusQuestionId !== prevFocusQuestionIdRef.current) {
+      // CRITICAL: Only allow agent to focus on questions if user has manually advanced past research
+      // This prevents the agent from jumping ahead before the user clicks "Next" on research
+      if (!hasManuallyAdvancedPastResearch.current) {
+        console.log('Agent tried to focus on question before user advanced past research. Ignoring focus.');
+        return;
+      }
+      
+      prevFocusQuestionIdRef.current = focusQuestionId;
+      const questionIndex = questions.findIndex(q => q.id === focusQuestionId);
+      console.log('Focus question effect:', { focusQuestionId, questionIndex, totalQuestions: questions.length, questionIds: questions.map(q => q.id) });
+      if (questionIndex !== -1) {
+        const stepIndex = RESEARCH_STEP_INDEX + 1 + questionIndex;
+        console.log('Setting current step to:', stepIndex, 'for question:', focusQuestionId);
+        setCurrentStep(stepIndex);
+        setVisibleSteps(prev => new Set([...prev, stepIndex]));
+        setCollapsedSteps(prev => {
+          const next = new Set(prev);
+          next.delete(stepIndex);
+          return next;
+        });
+        setShowQuestionsCard(true);
+        setTimeout(() => {
+          const input = inputRefs.current[stepIndex];
+          if (input) {
+            input.focus();
+          }
+        }, 100);
+      } else {
+        console.warn('Question ID not found:', focusQuestionId, 'Available IDs:', questions.map(q => q.id));
+      }
+    }
+  }, [focusQuestionId, questions]);
   
   // Center the active step vertically on the page and focus it for keyboard input
   useEffect(() => {
@@ -521,10 +635,11 @@ export function ProgressiveCard({
     projectPriority: string;
     projectName: string;
     projectContext: string;
-    marketResearch: MarketResearchResult | null;
+    marketResearch: string | null; // Serialized for comparison
   } | null>(null);
   
   useEffect(() => {
+    const marketResearchSerialized = marketResearch ? JSON.stringify(marketResearch) : null;
     const currentValues = {
       currentStep,
       answersLength: answers.length,
@@ -534,12 +649,15 @@ export function ProgressiveCard({
       projectPriority,
       projectName,
       projectContext,
-      marketResearch,
+      marketResearch: marketResearchSerialized,
     };
     
     // Check if anything actually changed
     const prev = prevValuesRef.current;
     if (prev) {
+      // Compare marketResearch by serialized string to avoid object reference issues
+      const marketResearchChanged = prev.marketResearch !== marketResearchSerialized;
+      
       const hasChanges = 
         prev.currentStep !== currentStep ||
         prev.answersLength !== answers.length ||
@@ -549,7 +667,7 @@ export function ProgressiveCard({
         prev.projectPriority !== projectPriority ||
         prev.projectName !== projectName ||
         prev.projectContext !== projectContext ||
-        prev.marketResearch !== marketResearch;
+        marketResearchChanged;
       
       if (!hasChanges) {
         prevValuesRef.current = currentValues;
@@ -602,7 +720,7 @@ export function ProgressiveCard({
         timeoutRefs.current.delete(timeoutId);
       }
     };
-  }, [currentStep, jobTitle, projectCategory, projectPriority, projectName, projectContext, answers, questions, marketResearch]);
+  }, [currentStep, jobTitle, projectCategory, projectPriority, projectName, projectContext, answers.length, questions.length]);
   
   // Update completion status immediately when answers or other dependencies change
   useEffect(() => {
@@ -647,24 +765,37 @@ export function ProgressiveCard({
         timeoutRefs.current.delete(timeoutId);
       }
     };
-  }, [answers, jobTitle, projectCategory, projectPriority, projectName, projectContext, marketResearch, questions.length, questions]);
+  }, [answers.length, jobTitle, projectCategory, projectPriority, projectName, projectContext, questions.length]);
   
   // Debounced estimate update - only updates existing estimate, doesn't create new one
+  const prevEstimateTotalRef = useRef<number | null>(null);
+  
   useEffect(() => {
     // Only update if estimate already exists (user has clicked Generate Estimate button)
-    if (!estimate || answers.length === 0) return;
+    if (!estimate || answers.length === 0) {
+      prevEstimateTotalRef.current = null;
+      return;
+    }
+    
+    // Only regenerate if total hours actually changed
+    const currentTotal = estimate.totalHours;
+    if (prevEstimateTotalRef.current === currentTotal) {
+      return; // No change, skip update
+    }
+    
+    prevEstimateTotalRef.current = currentTotal;
     
     const timeoutId = setTimeout(() => {
       if (onGenerateEstimate && setEstimate) {
         const newEstimate = onGenerateEstimate();
-        if (newEstimate) {
+        if (newEstimate && newEstimate.totalHours !== currentTotal) {
           setEstimate(newEstimate);
         }
       }
     }, 500); // 500ms debounce
     
     return () => clearTimeout(timeoutId);
-  }, [answers, projectName, projectContext, onGenerateEstimate, setEstimate, estimate]);
+  }, [answers.length, projectName, projectContext, estimate?.totalHours, onGenerateEstimate, setEstimate]);
   
   // Research update - only when project context changes (not on every answer change)
   useEffect(() => {
@@ -1375,7 +1506,7 @@ export function ProgressiveCard({
           if (e.key === 'Enter' && isComplete && isActive) {
             e.preventDefault();
             e.stopPropagation();
-            collapseStepImmediately(RESEARCH_STEP_INDEX);
+            collapseStepImmediately(RESEARCH_STEP_INDEX, true);
             handleNext();
           }
         }}
@@ -1485,7 +1616,7 @@ export function ProgressiveCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  collapseStepImmediately(RESEARCH_STEP_INDEX);
+                  collapseStepImmediately(RESEARCH_STEP_INDEX, true);
                   handleNext();
                 }}
                 className="flex items-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors shadow-sm text-white font-medium"
@@ -2198,13 +2329,20 @@ export function ProgressiveCard({
                   
                   return (
                     <div 
-                      className="w-full"
+                      className="flex justify-center w-full"
                       style={{ 
                         paddingTop: '12px', 
                         marginTop: '12px',
                         animation: 'slideDown 0.7s ease-out forwards'
                       }}
                     >
+                      <div
+                        style={{
+                          width: 'calc(65% + 2rem)',
+                          minWidth: 'calc(65% + 2rem)',
+                          maxWidth: 'calc(65% + 2rem)'
+                        }}
+                      >
                       <button
                         onClick={(e) => {
                           e.preventDefault();
@@ -2291,6 +2429,7 @@ export function ProgressiveCard({
                           )}
                         </span>
                       </button>
+                      </div>
                     </div>
                   );
                 }

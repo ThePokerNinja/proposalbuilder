@@ -619,7 +619,8 @@ export function EstimateVisualization({
   }
 
   // Legacy function kept for backward compatibility (currently unused but kept for potential future use)
-  // @ts-expect-error - Legacy function, intentionally unused
+  // We intentionally allow this to be unused to keep the implementation available.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function generateSummaryFromAnswers(projectName: string, _initialSummary: string, answers: Answer[]): string {
     const answerMap = new Map(answers.map(a => [a.questionId, a.value]));
     
@@ -1039,13 +1040,20 @@ export function EstimateVisualization({
             }}
           >
             <div
+              className="overflow-hidden"
               style={{
                 maxHeight: isSection1Open ? '5000px' : '50px',
-                opacity: isSection1Open ? 1 : 1,
-                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
           {isSection1Open ? (
+          <div
+            style={{
+              opacity: 1,
+              transform: 'translateY(0)',
+              transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+            }}
+          >
             <div>
               {/* Header */}
               <div className="mb-6">
@@ -1196,6 +1204,7 @@ export function EstimateVisualization({
         </div>
               </div>
             </div>
+          </div>
           ) : (
             /* Collapsed Section 1 - Show only Total Cost */
             <div 
@@ -1208,8 +1217,9 @@ export function EstimateVisualization({
                 minHeight: '50px',
                 paddingLeft: '20px',
                 paddingRight: '20px',
-                opacity: isSection1Open ? 0 : 1,
-                transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
+                opacity: 1,
+                transform: 'translateY(0)',
+                transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out',
               }}
             >
               <div className="absolute inset-0 bg-black/20 rounded-xl"></div>
@@ -1267,11 +1277,17 @@ export function EstimateVisualization({
               className="overflow-hidden"
               style={{
                 maxHeight: isSection2Open ? '5000px' : '50px',
-                opacity: isSection2Open ? 1 : 1,
-                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
         {isSection2Open ? (
+          <div
+            style={{
+              opacity: 1,
+              transform: 'translateY(0)',
+              transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+            }}
+          >
           <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900">Resource Allocation</h3>
@@ -1521,6 +1537,7 @@ export function EstimateVisualization({
             </div>
           </div>
           </div>
+          </div>
         ) : (
           /* Collapsed Section 2 - Show horizontal summary row */
           <div 
@@ -1529,8 +1546,9 @@ export function EstimateVisualization({
               minHeight: '50px',
               paddingLeft: '20px',
               paddingRight: '20px',
-              opacity: isSection2Open ? 0 : 1,
-              transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
+              opacity: 1,
+              transform: 'translateY(0)',
+              transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out',
             }}
           >
             <div className="flex items-center justify-between">
@@ -1669,11 +1687,17 @@ export function EstimateVisualization({
               className="overflow-hidden"
               style={{
                 maxHeight: isSection3Open ? '5000px' : '50px',
-                opacity: isSection3Open ? 1 : 1,
-                transition: 'max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
         {isSection3Open ? (
+          <div
+            style={{
+              opacity: 1,
+              transform: 'translateY(0)',
+              transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+            }}
+          >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Milestones Breakdown - Left Column */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col h-full">
@@ -1771,6 +1795,7 @@ export function EstimateVisualization({
           />
         </div>
           </div>
+          </div>
         ) : (
           /* Collapsed Section 3 - Show horizontal summary row */
           <div 
@@ -1779,8 +1804,9 @@ export function EstimateVisualization({
               minHeight: '50px',
               paddingLeft: '20px',
               paddingRight: '20px',
-              opacity: isSection3Open ? 0 : 1,
-              transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out'
+              opacity: 1,
+              transform: 'translateY(0)',
+              transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease-in-out',
             }}
           >
             <div className="flex items-center justify-between">
