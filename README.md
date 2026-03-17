@@ -125,3 +125,4 @@ The tool gracefully degrades to text input if voice recognition is not available
 ## License
 
 MIT
+
