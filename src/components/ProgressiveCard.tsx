@@ -140,7 +140,7 @@ export function ProgressiveCard({
       const question = questions[questionIndex];
       if (!question) return false;
       
-      const answer = answers.find(a => a.questionId === question.id);
+      //const answer = answers.find(a => a.questionId === question.id);
       
       // For select questions, check both the answer state AND the select element's value directly
       // This handles cases where onChange hasn't updated state yet
